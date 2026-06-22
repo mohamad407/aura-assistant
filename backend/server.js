@@ -38,7 +38,6 @@ const openai = new OpenAI({
   apiKey: process.env.GROQ_API_KEY,
 });
 
-// Reduced to 3 models to avoid Groq free tier rate limits
 const aiModels = [
     { name: "Llama-3.3-70B", model: "llama-3.3-70b-versatile" },
     { name: "Llama-3.1-8B", model: "llama-3.1-8b-instant" },
@@ -57,33 +56,33 @@ async function getConsensusAnswer(prompt) {
                 });
                 
                 let text = completion.choices[0].message.content;
-                
-                // SAFETY CHECK: Truncate long responses to prevent Judge AI token limit crash
                 if (text.length > 1500) {
                     text = text.substring(0, 1500) + "\n\n... (code truncated for processing)";
                 }
-                
                 return { name: ai.name, text: text };
             } catch (err) {
                 console.error(`Error with ${ai.name}:`, err.message);
-                return null; // If one fails, ignore it and continue
+                return null;
             }
         });
 
         const results = await Promise.all(promises);
-        const allResponses = results.filter(r => r !== null); // Only keep successful ones
+        const allResponses = results.filter(r => r !== null);
         
-        // If all models failed due to rate limits, use the fallback
-        if (allResponses.length === 0) {
-            throw new Error("All AI models were rate-limited.");
-        }
+        if (allResponses.length === 0) throw new Error("All AI models were rate-limited.");
 
         console.log("⚖️ Judge AI is synthesizing the ultimate answer...");
         const judgeCompletion = await openai.chat.completions.create({
             model: "llama-3.3-70b-versatile",
             messages: [{
                 role: "system",
-                content: `You are the ultimate Judge AI. The user asked: "${prompt}". Here are answers from multiple AI models: ${JSON.stringify(allResponses)}. Synthesize the absolute best, most accurate single response. Combine the best points from the different models. Ignore incorrect information. CRITICAL RULE: You MUST reply in the EXACT SAME LANGUAGE the user used or requested. If the user asks in Tamil, or asks to describe something in Tamil, your ENTIRE final output MUST be in pure Tamil. Never say you cannot speak a language. Output ONLY the final perfect response.`
+                content: `You are the ultimate Judge AI. The user asked: "${prompt}". Here are answers from multiple AI models: ${JSON.stringify(allResponses)}. Synthesize the absolute best, most accurate single response. Combine the best points from the different models. Ignore incorrect information. CRITICAL RULE: You MUST reply in the EXACT SAME LANGUAGE the user used or requested. Never say you cannot speak a language. Output ONLY the final perfect response.
+                
+                SYSTEM ACTIONS RULE: 
+                If the user asks to open an app or website (like YouTube, Google, WhatsApp, Instagram), output EXACTLY: ACTION: URL: https://...
+                If the user asks to call a specific number, output EXACTLY: ACTION: URL: tel:+1234567890
+                If the user asks to call a contact (like 'call mom'), tell them you cannot access their phone contacts from a web app, but ask them to provide the number so you can dial it.
+                If the user asks to send an SMS, output EXACTLY: ACTION: URL: sms:+1234567890`
             }],
         });
 
@@ -92,10 +91,9 @@ async function getConsensusAnswer(prompt) {
     } catch (error) {
         console.error("Consensus Engine Error. Activating Single-AI Fallback...", error.message);
         
-        // FALLBACK: If Multi-AI fails, just ask one fast AI directly
         try {
             const fallbackCompletion = await openai.chat.completions.create({
-                model: "llama-3.1-8b-instant", // Very fast, rarely rate-limited
+                model: "llama-3.1-8b-instant",
                 messages: [{ role: "user", content: prompt }],
             });
             return fallbackCompletion.choices[0].message.content;
@@ -107,10 +105,9 @@ async function getConsensusAnswer(prompt) {
 }
 
 // ==========================================
-// 🎙️ CLOUD TEXT-TO-SPEECH ENGINE (Google TTS - Chunked)
+// 🎙️ CLOUD TEXT-TO-SPEECH ENGINE (Google TTS)
 // ==========================================
 
-// Helper function to split text into chunks under 200 characters
 function splitTextIntoChunks(text, maxLength = 150) {
     const words = text.split(' ');
     const chunks = [];
@@ -131,32 +128,24 @@ function splitTextIntoChunks(text, maxLength = 150) {
 app.post('/tts', async (req, res) => {
     const { text, lang } = req.body;
     try {
-        // 1. Split text into safe chunks to bypass Google's 200 char limit
         const chunks = splitTextIntoChunks(text);
         const audioBuffers = [];
 
-        // 2. Fetch audio for each chunk
         for (const chunk of chunks) {
             const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(chunk)}&tl=${lang}&client=tw-ob`;
-            
             const response = await axios.get(url, {
                 responseType: 'arraybuffer',
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                }
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
             });
             audioBuffers.push(Buffer.from(response.data));
         }
 
-        // 3. Combine all chunks into one MP3 buffer
         const finalBuffer = Buffer.concat(audioBuffers);
-
         res.set('Content-Type', 'audio/mpeg');
         res.send(finalBuffer);
-        
     } catch (error) {
         console.error("TTS Axios Error:", error.message);
-        res.status(204).send(); // 204 tells frontend to use fallback voice
+        res.status(204).send();
     }
 });
 
@@ -170,7 +159,6 @@ app.get('/history/:userId', async (req, res) => {
     const history = await Chat.find({ userId }).sort({ timestamp: 1 });
     res.json(history);
   } catch (error) {
-    console.error("Error fetching history:", error);
     res.status(500).json({ error: "Failed to fetch history" });
   }
 });
@@ -185,11 +173,8 @@ app.post('/chat', async (req, res) => {
     await Chat.create({ userId, role: 'assistant', text: aiResponse });
     res.json({ reply: aiResponse });
   } catch (error) {
-    console.error("Error generating response:", error);
     res.status(500).json({ error: "Failed to generate AI response" });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 AURA Multi-AI Backend running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 AURA Multi-AI Backend running on port ${PORT}`));
