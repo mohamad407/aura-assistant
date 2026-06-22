@@ -58,13 +58,28 @@
             <button class="tab-btn" data-tab="history">History</button>
         </nav>
 
+        <!-- WAKE WORD STATUS BAR -->
+        <div class="wake-bar">
+            <div id="wakeWordIndicator" class="wake-indicator">
+                <span class="wake-dot"></span>
+                <span class="wake-label-idle">Say <strong>"Aura"</strong> to wake me up</span>
+                <span class="wake-label-active">Listening for your command...</span>
+            </div>
+        </div>
+
         <!-- CHAT VIEW -->
         <main class="view-container" id="view-chat">
             <div class="chat-area" id="historyContainer">
                 <div class="empty-state">
                     <div class="empty-icon">✨</div>
                     <h2>How can I help you today?</h2>
-                    <p>Tap the orb below to speak with AURA.</p>
+                    <p>Say <strong>"Aura"</strong> or tap the orb below.</p>
+                    <div class="quick-commands">
+                        <span class="quick-chip">🎵 "Play Shape of You"</span>
+                        <span class="quick-chip">📱 "Open YouTube"</span>
+                        <span class="quick-chip">🌤️ "Weather today"</span>
+                        <span class="quick-chip">💬 "Open WhatsApp"</span>
+                    </div>
                 </div>
             </div>
         </main>
