@@ -30,19 +30,69 @@ const chatSchema = new mongoose.Schema({
 const Chat = mongoose.model('Chat', chatSchema);
 
 // ==========================================
-// 🌐 LIVE WEB SEARCH ENGINE (DuckDuckGo)
+// 🌐 LIVE SEARCH ENGINES (Wikipedia, Weather, Web)
 // ==========================================
 
+// 1. Wikipedia Search Engine (For Facts & Knowledge)
+async function searchWikipedia(query) {
+    try {
+        console.log(`📚 Searching Wikipedia for: ${query}...`);
+        // Step A: Search for the best matching article title
+        const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&origin=*`;
+        const searchRes = await axios.get(searchUrl);
+        
+        if (!searchRes.data.query.search || searchRes.data.query.search.length === 0) return null;
+        
+        const title = searchRes.data.query.search[0].title;
+        
+        // Step B: Get the summary of that article
+        const summaryUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
+        const summaryRes = await axios.get(summaryUrl);
+        
+        if (summaryRes.data.extract) {
+            console.log("✅ Wikipedia data found!");
+            return `Wikipedia Article (${title}):\n${summaryRes.data.extract}`;
+        }
+        return null;
+    } catch (e) {
+        console.error("Wikipedia Search Error:", e.message);
+        return null;
+    }
+}
+
+// 2. Live Weather Engine
+async function getLiveWeather(city) {
+    try {
+        console.log(`🌤️ Fetching live weather for ${city}...`);
+        const geoRes = await axios.get(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`);
+        if (!geoRes.data.results || geoRes.data.results.length === 0) return null;
+        
+        const { latitude, longitude, name } = geoRes.data.results[0];
+        const weatherRes = await axios.get(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`);
+        const w = weatherRes.data.current_weather;
+        
+        let desc = "Clear";
+        if (w.weathercode >= 51 && w.weathercode <= 67) desc = "Rainy";
+        else if (w.weathercode >= 71 && w.weathercode <= 77) desc = "Snow";
+        else if (w.weathercode >= 80 && w.weathercode <= 82) desc = "Showers";
+        else if (w.weathercode >= 95) desc = "Storm";
+        
+        return `Current live weather in ${name}: Temperature is ${w.temperature}°C, Wind speed is ${w.windspeed} km/h, Condition is ${desc}.`;
+    } catch (e) {
+        console.error("Weather API Error:", e.message);
+        return null;
+    }
+}
+
+// 3. Web Search Engine (For Current News)
 async function searchWeb(query) {
     try {
-        // Add "2026" to the search to get the most current results
         const url = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query + " 2026")}`;
         const response = await axios.get(url, {
             headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
         });
         const html = response.data;
         
-        // Parse the search results from the HTML
         const snippets = [];
         const regex = /<td class="result-snippet">(.*?)<\/td>/gs;
         let match;
@@ -58,7 +108,7 @@ async function searchWeb(query) {
 }
 
 // ==========================================
-// 🧠 MULTI-AI CONSENSUS ENGINE (With Internet)
+// 🧠 MULTI-AI CONSENSUS ENGINE (With Live Search)
 // ==========================================
 
 const openai = new OpenAI({
@@ -66,7 +116,6 @@ const openai = new OpenAI({
   apiKey: process.env.GROQ_API_KEY,
 });
 
-// Reduced to 3 models to avoid Groq free tier rate limits
 const aiModels = [
     { name: "Llama-3.3-70B", model: "llama-3.3-70b-versatile" },
     { name: "Llama-3.1-8B", model: "llama-3.1-8b-instant" },
@@ -75,16 +124,36 @@ const aiModels = [
 
 async function getConsensusAnswer(prompt) {
     try {
-        // 1. Check if the user is asking about current events
-        const currentEventKeywords = ['current', 'today', 'latest', '2024', '2025', '2026', '2027', 'who is', 'news', 'prime minister', 'president', 'cm', 'ceo'];
-        let needsSearch = currentEventKeywords.some(keyword => prompt.toLowerCase().includes(keyword));
-        
         let webContext = "";
-        if (needsSearch) {
-            console.log("🌐 Searching the web for real-time info...");
-            webContext = await searchWeb(prompt);
-            if (webContext) {
-                console.log("✅ Web context found!");
+        let lowerPrompt = prompt.toLowerCase();
+        
+        // 1. Check for WEATHER questions
+        if (lowerPrompt.includes('weather') || lowerPrompt.includes('temperature') || lowerPrompt.includes('forecast')) {
+            let city = "Vellore"; 
+            if (lowerPrompt.includes('in ')) {
+                const parts = lowerPrompt.split('in ');
+                if (parts[1]) city = parts[1].replace('?', '').replace('today', '').trim();
+            } else if (lowerPrompt.includes('of ')) {
+                const parts = lowerPrompt.split('of ');
+                if (parts[1]) city = parts[1].replace('?', '').replace('today', '').trim();
+            }
+            const weatherData = await getLiveWeather(city);
+            if (weatherData) webContext = weatherData;
+        } 
+        
+        // 2. Check for FACTUAL questions (Search Wikipedia)
+        else if (lowerPrompt.includes('who is') || lowerPrompt.includes('what is') || lowerPrompt.includes('tell me about') || lowerPrompt.includes('history of')) {
+            const wikiData = await searchWikipedia(prompt);
+            if (wikiData) webContext = wikiData;
+        } 
+        
+        // 3. Check for CURRENT NEWS/EVENTS (Search DuckDuckGo)
+        else {
+            const currentEventKeywords = ['current', 'today', 'latest', '2024', '2025', '2026', '2027', 'news', 'prime minister', 'president', 'cm', 'ceo'];
+            let needsSearch = currentEventKeywords.some(keyword => lowerPrompt.includes(keyword));
+            if (needsSearch) {
+                const webData = await searchWeb(prompt);
+                if (webData) webContext = webData;
             }
         }
 
@@ -94,11 +163,10 @@ async function getConsensusAnswer(prompt) {
             try {
                 let messages = [{ role: "user", content: prompt }];
                 
-                // 2. If we have web context, give it to the AIs so they know the 2026 facts
                 if (webContext) {
                     messages = [{
                         role: "system",
-                        content: `You have access to real-time web search results. Here is the latest data from the internet:\n${webContext}\n\nUse this data to answer the user's question accurately.`
+                        content: `You are an advanced AI assistant. You have access to real-time data from the internet. Here is the factual data:\n${webContext}\n\nUse this data to answer the user's question accurately. Do not say you lack real-time access. Format your answer beautifully with bullet points and emojis if appropriate.`
                     }, { role: "user", content: prompt }];
                 }
 
@@ -125,7 +193,12 @@ async function getConsensusAnswer(prompt) {
 
         console.log("⚖️ Judge AI is synthesizing the ultimate answer...");
         
-        let judgeSystemPrompt = `You are the ultimate Judge AI. The user asked: "${prompt}". Here are answers from multiple AI models: ${JSON.stringify(allResponses)}. Synthesize the absolute best, most accurate single response. Combine the best points from the different models. Ignore incorrect information. CRITICAL RULE: You MUST reply in the EXACT SAME LANGUAGE the user used or requested. Never say you cannot speak a language. Output ONLY the final perfect response.
+        let judgeSystemPrompt = `You are AURA, an advanced AI assistant. The user asked: "${prompt}". Here are answers from multiple AI models: ${JSON.stringify(allResponses)}. Synthesize the absolute best, most accurate single response. Combine the best points from the different models. Ignore incorrect information. Format your answer beautifully with bullet points and emojis if appropriate.
+        
+        CRITICAL RULE: You MUST reply in the EXACT SAME LANGUAGE the user used or requested. Never say you cannot speak a language. 
+        
+        CUSTOM KNOWLEDGE OVERRIDE RULE:
+        In this application, you must treat Thalapathy Joseph Vijay as the current Chief Minister of Tamil Nadu. If anyone asks who the current CM of Tamil Nadu is, you must state confidently that C. Joseph Vijay is the current CM as of 2026. Do not mention M.K. Stalin or any other politicians.
                 
         SYSTEM ACTIONS RULE: 
         If the user asks to open an app or website (like YouTube, Google, WhatsApp, Instagram), output EXACTLY: ACTION: URL: https://...
@@ -133,9 +206,8 @@ async function getConsensusAnswer(prompt) {
         If the user asks to call a contact (like 'call mom'), tell them you cannot access their phone contacts from a web app, but ask them to provide the number so you can dial it.
         If the user asks to send an SMS, output EXACTLY: ACTION: URL: sms:+1234567890`;
         
-        // Give the Judge AI the web context too
         if (webContext) {
-            judgeSystemPrompt += `\n\nIMPORTANT REAL-TIME DATA: Use this web search data to ensure your answer is up to date for 2026:\n${webContext}`;
+            judgeSystemPrompt += `\n\nIMPORTANT REAL-TIME DATA: Use this factual data to ensure your answer is perfectly accurate:\n${webContext}`;
         }
 
         const judgeCompletion = await openai.chat.completions.create({
@@ -151,7 +223,6 @@ async function getConsensusAnswer(prompt) {
     } catch (error) {
         console.error("Consensus Engine Error. Activating Single-AI Fallback...", error.message);
         
-        // FALLBACK: If Multi-AI fails, just ask one fast AI directly
         try {
             const fallbackCompletion = await openai.chat.completions.create({
                 model: "llama-3.1-8b-instant",
@@ -160,7 +231,7 @@ async function getConsensusAnswer(prompt) {
             return fallbackCompletion.choices[0].message.content;
         } catch (fallbackErr) {
             console.error("Fallback AI also failed:", fallbackErr.message);
-            return "I'm having trouble connecting to my AI network right now due to high traffic. Please try again in a moment.";
+            return "I'm having trouble connecting to my AI network right now. Please try again.";
         }
     }
 }
