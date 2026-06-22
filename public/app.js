@@ -362,6 +362,14 @@ function setupWakeWordListener() {
 }
 
 function triggerCommandListening() {
+  conversationMode = true;
+
+clearTimeout(conversationTimer);
+
+conversationTimer = setTimeout(() => {
+    conversationMode = false;
+    restartWakeWord();
+}, 15000);
   console.log("🎤 Triggering command listening...");
   showWakeWordIndicator(true);
   updateBubble("Listening for your command... 👂");
