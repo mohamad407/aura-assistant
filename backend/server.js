@@ -38,12 +38,11 @@ const openai = new OpenAI({
   apiKey: process.env.GROQ_API_KEY,
 });
 
+// Reduced to 3 models to avoid Groq free tier rate limits
 const aiModels = [
     { name: "Llama-3.3-70B", model: "llama-3.3-70b-versatile" },
     { name: "Llama-3.1-8B", model: "llama-3.1-8b-instant" },
-    { name: "Mixtral-8x7B", model: "mixtral-8x7b-32768" },
-    { name: "Gemma-2-9B", model: "gemma2-9b-it" },
-    { name: "Llama-3.1-70B", model: "llama-3.1-70b-versatile" }
+    { name: "Gemma-2-9B", model: "gemma2-9b-it" }
 ];
 
 async function getConsensusAnswer(prompt) {
@@ -67,12 +66,18 @@ async function getConsensusAnswer(prompt) {
                 return { name: ai.name, text: text };
             } catch (err) {
                 console.error(`Error with ${ai.name}:`, err.message);
-                return { name: ai.name, text: "Error generating response." };
+                return null; // If one fails, ignore it and continue
             }
         });
 
-        const allResponses = await Promise.all(promises);
+        const results = await Promise.all(promises);
+        const allResponses = results.filter(r => r !== null); // Only keep successful ones
         
+        // If all models failed due to rate limits, use the fallback
+        if (allResponses.length === 0) {
+            throw new Error("All AI models were rate-limited.");
+        }
+
         console.log("⚖️ Judge AI is synthesizing the ultimate answer...");
         const judgeCompletion = await openai.chat.completions.create({
             model: "llama-3.3-70b-versatile",
@@ -85,8 +90,19 @@ async function getConsensusAnswer(prompt) {
         return judgeCompletion.choices[0].message.content;
         
     } catch (error) {
-        console.error("Consensus Engine Error:", error);
-        return "I encountered an error while consulting my AI network. The request may have been too large. Please try asking for a smaller piece of code or a more specific question.";
+        console.error("Consensus Engine Error. Activating Single-AI Fallback...", error.message);
+        
+        // FALLBACK: If Multi-AI fails, just ask one fast AI directly
+        try {
+            const fallbackCompletion = await openai.chat.completions.create({
+                model: "llama-3.1-8b-instant", // Very fast, rarely rate-limited
+                messages: [{ role: "user", content: prompt }],
+            });
+            return fallbackCompletion.choices[0].message.content;
+        } catch (fallbackErr) {
+            console.error("Fallback AI also failed:", fallbackErr.message);
+            return "I'm having trouble connecting to my AI network right now due to high traffic. Please try again in a moment.";
+        }
     }
 }
 
