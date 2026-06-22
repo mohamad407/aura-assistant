@@ -30,7 +30,35 @@ const chatSchema = new mongoose.Schema({
 const Chat = mongoose.model('Chat', chatSchema);
 
 // ==========================================
-// 🧠 MULTI-AI CONSENSUS ENGINE (GROQ - FREE)
+// 🌐 LIVE WEB SEARCH ENGINE (DuckDuckGo)
+// ==========================================
+
+async function searchWeb(query) {
+    try {
+        // Add "2026" to the search to get the most current results
+        const url = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query + " 2026")}`;
+        const response = await axios.get(url, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+        });
+        const html = response.data;
+        
+        // Parse the search results from the HTML
+        const snippets = [];
+        const regex = /<td class="result-snippet">(.*?)<\/td>/gs;
+        let match;
+        while ((match = regex.exec(html)) !== null && snippets.length < 3) {
+            let text = match[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&');
+            snippets.push(text);
+        }
+        return snippets.join('\n');
+    } catch (e) {
+        console.error("Web Search Error:", e.message);
+        return "";
+    }
+}
+
+// ==========================================
+// 🧠 MULTI-AI CONSENSUS ENGINE (With Internet)
 // ==========================================
 
 const openai = new OpenAI({
@@ -38,6 +66,7 @@ const openai = new OpenAI({
   apiKey: process.env.GROQ_API_KEY,
 });
 
+// Reduced to 3 models to avoid Groq free tier rate limits
 const aiModels = [
     { name: "Llama-3.3-70B", model: "llama-3.3-70b-versatile" },
     { name: "Llama-3.1-8B", model: "llama-3.1-8b-instant" },
@@ -46,13 +75,36 @@ const aiModels = [
 
 async function getConsensusAnswer(prompt) {
     try {
+        // 1. Check if the user is asking about current events
+        const currentEventKeywords = ['current', 'today', 'latest', '2024', '2025', '2026', '2027', 'who is', 'news', 'prime minister', 'president', 'cm', 'ceo'];
+        let needsSearch = currentEventKeywords.some(keyword => prompt.toLowerCase().includes(keyword));
+        
+        let webContext = "";
+        if (needsSearch) {
+            console.log("🌐 Searching the web for real-time info...");
+            webContext = await searchWeb(prompt);
+            if (webContext) {
+                console.log("✅ Web context found!");
+            }
+        }
+
         console.log(`🧠 Consulting ${aiModels.length} AI models in parallel...`);
         
         const promises = aiModels.map(async (ai) => {
             try {
+                let messages = [{ role: "user", content: prompt }];
+                
+                // 2. If we have web context, give it to the AIs so they know the 2026 facts
+                if (webContext) {
+                    messages = [{
+                        role: "system",
+                        content: `You have access to real-time web search results. Here is the latest data from the internet:\n${webContext}\n\nUse this data to answer the user's question accurately.`
+                    }, { role: "user", content: prompt }];
+                }
+
                 const completion = await openai.chat.completions.create({
                     model: ai.model,
-                    messages: [{ role: "user", content: prompt }],
+                    messages: messages,
                 });
                 
                 let text = completion.choices[0].message.content;
@@ -72,17 +124,25 @@ async function getConsensusAnswer(prompt) {
         if (allResponses.length === 0) throw new Error("All AI models were rate-limited.");
 
         console.log("⚖️ Judge AI is synthesizing the ultimate answer...");
+        
+        let judgeSystemPrompt = `You are the ultimate Judge AI. The user asked: "${prompt}". Here are answers from multiple AI models: ${JSON.stringify(allResponses)}. Synthesize the absolute best, most accurate single response. Combine the best points from the different models. Ignore incorrect information. CRITICAL RULE: You MUST reply in the EXACT SAME LANGUAGE the user used or requested. Never say you cannot speak a language. Output ONLY the final perfect response.
+                
+        SYSTEM ACTIONS RULE: 
+        If the user asks to open an app or website (like YouTube, Google, WhatsApp, Instagram), output EXACTLY: ACTION: URL: https://...
+        If the user asks to call a specific number, output EXACTLY: ACTION: URL: tel:+1234567890
+        If the user asks to call a contact (like 'call mom'), tell them you cannot access their phone contacts from a web app, but ask them to provide the number so you can dial it.
+        If the user asks to send an SMS, output EXACTLY: ACTION: URL: sms:+1234567890`;
+        
+        // Give the Judge AI the web context too
+        if (webContext) {
+            judgeSystemPrompt += `\n\nIMPORTANT REAL-TIME DATA: Use this web search data to ensure your answer is up to date for 2026:\n${webContext}`;
+        }
+
         const judgeCompletion = await openai.chat.completions.create({
             model: "llama-3.3-70b-versatile",
             messages: [{
                 role: "system",
-                content: `You are the ultimate Judge AI. The user asked: "${prompt}". Here are answers from multiple AI models: ${JSON.stringify(allResponses)}. Synthesize the absolute best, most accurate single response. Combine the best points from the different models. Ignore incorrect information. CRITICAL RULE: You MUST reply in the EXACT SAME LANGUAGE the user used or requested. Never say you cannot speak a language. Output ONLY the final perfect response.
-                
-                SYSTEM ACTIONS RULE: 
-                If the user asks to open an app or website (like YouTube, Google, WhatsApp, Instagram), output EXACTLY: ACTION: URL: https://...
-                If the user asks to call a specific number, output EXACTLY: ACTION: URL: tel:+1234567890
-                If the user asks to call a contact (like 'call mom'), tell them you cannot access their phone contacts from a web app, but ask them to provide the number so you can dial it.
-                If the user asks to send an SMS, output EXACTLY: ACTION: URL: sms:+1234567890`
+                content: judgeSystemPrompt
             }],
         });
 
@@ -91,6 +151,7 @@ async function getConsensusAnswer(prompt) {
     } catch (error) {
         console.error("Consensus Engine Error. Activating Single-AI Fallback...", error.message);
         
+        // FALLBACK: If Multi-AI fails, just ask one fast AI directly
         try {
             const fallbackCompletion = await openai.chat.completions.create({
                 model: "llama-3.1-8b-instant",
@@ -159,6 +220,7 @@ app.get('/history/:userId', async (req, res) => {
     const history = await Chat.find({ userId }).sort({ timestamp: 1 });
     res.json(history);
   } catch (error) {
+    console.error("Error fetching history:", error);
     res.status(500).json({ error: "Failed to fetch history" });
   }
 });
@@ -173,6 +235,7 @@ app.post('/chat', async (req, res) => {
     await Chat.create({ userId, role: 'assistant', text: aiResponse });
     res.json({ reply: aiResponse });
   } catch (error) {
+    console.error("Error generating response:", error);
     res.status(500).json({ error: "Failed to generate AI response" });
   }
 });
