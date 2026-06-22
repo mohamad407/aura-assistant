@@ -1,1 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AURA - Voice AI Assistant</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    
+    <!-- LOGIN SCREEN -->
+    <div id="auth-screen" class="auth-container">
+        <div class="auth-card">
+            <h1>AURA</h1>
+            <p>Sign in to save your chat history</p>
+            
+            <input type="email" id="email-input" placeholder="Email" class="auth-input">
+            <input type="password" id="password-input" placeholder="Password" class="auth-input">
+            
+            <button id="signup-btn" class="auth-btn">Sign Up / Login</button>
+            
+            <div class="divider">OR</div>
+            
+            <button id="google-btn" class="google-btn">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/2048px-Google_%22G%22_logo.svg.png" width="20" alt="G">
+                Continue with Google
+            </button>
+        </div>
+    </div>
 
+    <!-- MAIN APP (Hidden until login) -->
+    <div id="app-container" class="app-container" style="display: none;">
+        <header>
+            <div>
+                <h1>AURA</h1>
+                <p>Your Voice AI Assistant</p>
+            </div>
+            <button id="logout-btn" class="logout-btn">Logout</button>
+        </header>
+
+        <main class="history-container" id="historyContainer"></main>
+
+        <div class="aura-container" id="auraContainer">
+            <div class="speech-bubble" id="speechBubble">
+                <span id="bubbleText">Tap me to start!</span>
+            </div>
+            <div class="aura-robot" id="auraRobot">
+                <div class="robot-emoji">🤖</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK (v10 Modular) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+        // PASTE YOUR FIREBASE CONFIG HERE
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+
+        // Expose to global scope so app.js can use it
+        window.firebaseAuth = {
+            auth, provider, signInWithPopup, createUserWithEmailAndPassword, 
+            signInWithEmailAndPassword, signOut, onAuthStateChanged
+        };
+        
+        // Load main script after firebase is ready
+        const script = document.createElement('script');
+        script.src = 'app.js';
+        document.body.appendChild(script);
+    </script>
+</body>
+</html>
