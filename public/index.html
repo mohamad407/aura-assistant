@@ -51,30 +51,31 @@
         </div>
     </div>
 
-    <!-- Firebase SDK (v10 Modular) -->
-<script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-analytics.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
+    <!-- Firebase SDK (v12 Modular) -->
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
+        
+        // IMPORT AUTH INSTEAD OF ANALYTICS
+        import { getAuth, GoogleAuthProvider, signInWithPopup, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 
-  // Your web app's Firebase configuration
-  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-  const firebaseConfig = {
-    apiKey: "AIzaSyCGJ-UxLAuQVKp0Up8WFUHmcIykai3F41o",
-    authDomain: "aura-assistant-9468e.firebaseapp.com",
-    projectId: "aura-assistant-9468e",
-    storageBucket: "aura-assistant-9468e.firebasestorage.app",
-    messagingSenderId: "907263465889",
-    appId: "1:907263465889:web:edfcd5f03a9f389e9d53e0",
-    measurementId: "G-Y1BLMDRB2K"
-  };
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCGJ-UxLAuQVKp0Up8WFUHmcIykai3F41o",
+            authDomain: "aura-assistant-9468e.firebaseapp.com",
+            projectId: "aura-assistant-9468e",
+            storageBucket: "aura-assistant-9468e.firebasestorage.app",
+            messagingSenderId: "907263465889",
+            appId: "1:907263465889:web:edfcd5f03a9f389e9d53e0",
+            measurementId: "G-Y1BLMDRB2K"
+        };
 
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
-
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        
+        // INITIALIZE AUTH AND PROVIDER (This was missing!)
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
 
         // Expose to global scope so app.js can use it
         window.firebaseAuth = {
