@@ -42,7 +42,7 @@
         </div>
     </div>
 
-    <!-- MAIN DASHBOARD (Hidden until login) -->
+    <!-- MAIN DASHBOARD -->
     <div id="app-container" class="app-container" style="display: none;">
         <header class="dash-header">
             <div class="header-left">
@@ -52,14 +52,36 @@
             <button id="logout-btn" class="logout-btn">DISCONNECT</button>
         </header>
 
-        <main class="chat-history-section" id="historyContainer">
-            <!-- Chat history will be injected here via JS -->
+        <!-- LIVE TIME & WEATHER WIDGET -->
+        <div class="dash-info-bar">
+            <div class="info-block">
+                <span class="info-label">SYSTEM TIME</span>
+                <span id="live-time" class="info-value">--:--:--</span>
+                <span id="live-date" class="info-sub">Loading...</span>
+            </div>
+            <div class="info-divider"></div>
+            <div class="info-block">
+                <span class="info-label">INDIA WEATHER</span>
+                <span id="weather-temp" class="info-value">--°C</span>
+                <span id="weather-desc" class="info-sub">Offline</span>
+            </div>
+        </div>
+
+        <!-- ACTIVE CHAT SECTION -->
+        <div class="section-label">ACTIVE NEURAL LINK</div>
+        <main class="active-chat-section" id="historyContainer">
             <div class="empty-state">
                 <div class="empty-robot">🤖</div>
                 <p>NEURAL CORE ONLINE</p>
                 <span>Tap the orb below to communicate</span>
             </div>
         </main>
+
+        <!-- HISTORY ARCHIVE SECTION -->
+        <div class="section-label">ARCHIVE LOGS</div>
+        <div class="session-history" id="sessionHistory">
+            <div class="empty-state small"><p>Loading archives...</p></div>
+        </div>
 
         <!-- AURA Floating Assistant Orb -->
         <div class="aura-container" id="auraContainer">
@@ -74,7 +96,7 @@
         </div>
     </div>
 
-    <!-- Firebase SDK (v10 Modular) -->
+    <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
         import { getAuth, GoogleAuthProvider, signInWithPopup, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
