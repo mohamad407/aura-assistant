@@ -72,11 +72,13 @@ async function getConsensusAnswer(prompt) {
         
         // 3. Pass all responses to the Judge AI to synthesize the best one
         console.log("⚖️ Judge AI is synthesizing the ultimate answer...");
-        const judgeCompletion = await openai.chat.completions.create({
-            model: "llama-3.3-70b-versatile", // Using Llama 3.3 70B as the Judge
+              const judgeCompletion = await openai.chat.completions.create({
+            model: "llama-3.3-70b-versatile",
             messages: [{
                 role: "system",
-                content: `You are the ultimate Judge AI. The user asked: "${prompt}". Here are answers from multiple AI models: ${JSON.stringify(allResponses)}. Synthesize the absolute best, most accurate single response. Combine the best points from the different models. Ignore incorrect information. Output ONLY the final perfect response to the user.`
+                content: `You are the ultimate Judge AI. The user asked: "${prompt}". Here are answers from multiple AI models: ${JSON.stringify(allResponses)}. Synthesize the absolute best, most accurate single response. Combine the best points from the different models. Ignore incorrect information.
+                
+                CRITICAL RULE: You MUST reply in the EXACT SAME LANGUAGE the user used or requested. If the user asks in French, reply entirely in French. If they ask to describe something in Hindi, reply entirely in Hindi. Output ONLY the final perfect response.`
             }],
         });
 
