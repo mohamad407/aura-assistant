@@ -41,22 +41,11 @@ const openrouter = new OpenAI({
 });
 
 // 1. Define your 15+ AI Models
+// 1. Define your AI Models (USING FREE OPENROUTER MODELS)
 const aiModels = [
-    { name: "GPT-4o", model: "openai/gpt-4o" },
-    { name: "Claude-3.5-Sonnet", model: "anthropic/claude-3.5-sonnet" },
-    { name: "Gemini-1.5-Pro", model: "google/gemini-pro-1.5" },
-    { name: "Llama-3-70B", model: "meta-llama/llama-3-70b-instruct" },
-    { name: "Mistral-Large", model: "mistralai/mistral-large" },
-    { name: "GPT-4-Turbo", model: "openai/gpt-4-turbo" },
-    { name: "Command-R-Plus", model: "cohere/command-r-plus" },
-    { name: "DeepSeek-Coder", model: "deepseek/deepseek-coder" },
-    { name: "Qwen-2-72B", model: "qwen/qwen-2-72b-instruct" },
-    { name: "Mythomax-L2-13B", model: "gryphe/mythomax-l2-13b" },
-    { name: "Mixtral-8x7B", model: "mistralai/mixtral-8x7b-instruct" },
-    { name: "Claude-3-Opus", model: "anthropic/claude-3-opus" },
-    { name: "GPT-3.5-Turbo", model: "openai/gpt-3.5-turbo" },
-    { name: "Llama-3-8B", model: "meta-llama/llama-3-8b-instruct" },
-    { name: "Gemini-1.5-Flash", model: "google/gemini-flash-1.5" }
+    { name: "Llama-3.3-70B", model: "meta-llama/llama-3.3-70b-instruct:free" },
+    { name: "Gemini-Flash", model: "google/gemini-2.0-flash-exp:free" },
+    { name: "Mistral-7B", model: "mistralai/mistral-7b-instruct:free" }
 ];
 
 // 2. Query all AIs in parallel and synthesize with a Judge AI
@@ -82,8 +71,10 @@ async function getConsensusAnswer(prompt) {
         
         // 3. Pass all responses to the Judge AI to synthesize the best one
         console.log("⚖️ Judge AI is synthesizing the ultimate answer...");
+        
+        // USING A FREE MODEL AS THE JUDGE
         const judgeCompletion = await openrouter.chat.completions.create({
-            model: "openai/gpt-4o", // Using GPT-4o as the ultimate Judge
+            model: "meta-llama/llama-3.3-70b-instruct:free", 
             messages: [{
                 role: "system",
                 content: `You are the ultimate Judge AI. The user asked: "${prompt}". Here are answers from multiple AI models: ${JSON.stringify(allResponses)}. Synthesize the absolute best, most accurate single response. Combine the best points from the different models. Ignore incorrect information. Output ONLY the final perfect response to the user.`
