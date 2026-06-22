@@ -16,40 +16,56 @@ let CURRENT_USER_ID = null;
 // Audio Player for Cloud TTS
 let audioPlayer = new Audio();
 
+// --- TAB NAVIGATION ---
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        // Remove active from all
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        
+        // Hide all views
+        document.querySelectorAll('.view-container').forEach(view => view.style.display = 'none');
+        
+        // Show selected view
+        const tab = btn.getAttribute('data-tab');
+        document.getElementById(`view-${tab}`).style.display = 'block';
+        
+        // If switching to history, refresh it
+        if (tab === 'history') loadHistory();
+    });
+});
+
 // --- LIVE TIME & WEATHER WIDGET ---
 function updateTime() {
     const now = new Date();
-    document.getElementById('live-time').textContent = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+    document.getElementById('live-time').textContent = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
     document.getElementById('live-date').textContent = now.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
 async function loadWeather() {
     try {
-        // Using Open-Meteo (Free, no API key needed). Coordinates set to Delhi, India
         const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=28.6139&longitude=77.2090&current_weather=true');
         const data = await res.json();
         const temp = Math.round(data.current_weather.temperature);
         const code = data.current_weather.weathercode;
         
         let desc = "Clear";
-        if (code >= 51 && code <= 67) desc = "Rainy";
+        if (code >= 51 && code <= 67) desc = "Rain";
         else if (code >= 71 && code <= 77) desc = "Snow";
         else if (code >= 80 && code <= 82) desc = "Showers";
         else if (code >= 95) desc = "Storm";
         
-        document.getElementById('weather-temp').textContent = `${temp}°C`;
+        document.getElementById('weather-temp').textContent = `${temp}°`;
         document.getElementById('weather-desc').textContent = desc;
     } catch(e) {
-        document.getElementById('weather-desc').textContent = "Offline";
+        document.getElementById('weather-desc').textContent = "N/A";
     }
 }
 
-// Run widgets immediately and set intervals
 updateTime();
 loadWeather();
 setInterval(updateTime, 1000);
-setInterval(loadWeather, 600000); // Update weather every 10 mins
-
+setInterval(loadWeather, 600000);
 
 // --- FIREBASE AUTH EVENTS ---
 document.getElementById('signup-btn').addEventListener('click', () => {
@@ -79,13 +95,10 @@ window.firebaseAuth.onAuthStateChanged(window.firebaseAuth.auth, (user) => {
         CURRENT_USER_ID = user.uid;
         authScreen.style.display = 'none';
         appContainer.style.display = 'flex';
-        loadHistory();
     } else {
         CURRENT_USER_ID = null;
         authScreen.style.display = 'flex';
         appContainer.style.display = 'none';
-        historyContainer.innerHTML = '<div class="empty-state"><div class="empty-robot">🤖</div><p>NEURAL CORE ONLINE</p><span>Tap the orb below to communicate</span></div>';
-        sessionHistory.innerHTML = '<div class="empty-state small"><p>Loading archives...</p></div>';
     }
 });
 
@@ -96,31 +109,23 @@ if (recognition) {
     recognition.continuous = false;
     recognition.interimResults = false;
     recognition.lang = 'en-IN'; 
-} else {
-    alert("Your browser doesn't support Speech Recognition. Please use Chrome or Edge.");
 }
 
 // --- MONGODB HISTORY MANAGEMENT ---
 async function loadHistory() {
     if (!CURRENT_USER_ID) return;
     try {
+        sessionHistory.innerHTML = '<div class="empty-state small"><p>Loading history...</p></div>';
+        
         const response = await fetch(`https://aura-assistant-34ri.onrender.com/history/${CURRENT_USER_ID}`);
         const history = await response.json();
         
-        if (!Array.isArray(history)) {
-            sessionHistory.innerHTML = '<div class="empty-state small"><p>Error loading logs.</p></div>';
+        if (!Array.isArray(history) || history.length === 0) {
+            sessionHistory.innerHTML = '<div class="empty-state small"><p>No conversation history yet.</p></div>';
             return;
         }
         
-        // Clear previous logs
         sessionHistory.innerHTML = '';
-        
-        if (history.length === 0) {
-            sessionHistory.innerHTML = '<div class="empty-state small"><p>NO ARCHIVES FOUND</p></div>';
-            return;
-        }
-
-        // Group history by date
         const groups = {};
         const today = new Date().setHours(0,0,0,0);
         const yesterday = today - (24 * 60 * 60 * 1000);
@@ -128,15 +133,14 @@ async function loadHistory() {
         history.forEach(msg => {
             const d = new Date(msg.timestamp).setHours(0,0,0,0);
             let label;
-            if (d === today) label = "TODAY";
-            else if (d === yesterday) label = "YESTERDAY";
+            if (d === today) label = "Today";
+            else if (d === yesterday) label = "Yesterday";
             else label = new Date(msg.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
             
             if (!groups[label]) groups[label] = [];
             groups[label].push(msg);
         });
 
-        // Render grouped history into the Archive Logs section
         for (const dateLabel in groups) {
             const groupDiv = document.createElement('div');
             groupDiv.className = 'history-day-group';
@@ -149,9 +153,8 @@ async function loadHistory() {
             groups[dateLabel].forEach(msg => {
                 const msgDiv = document.createElement('div');
                 msgDiv.className = `history-msg ${msg.role}`;
-                // Truncate long messages for the sidebar view
-                const shortText = msg.text.substring(0, 150) + (msg.text.length > 150 ? '...' : '');
-                msgDiv.innerHTML = `<span class="history-role">${msg.role.toUpperCase()}</span>${shortText}`;
+                const shortText = msg.text.substring(0, 200) + (msg.text.length > 200 ? '...' : '');
+                msgDiv.innerHTML = `<span class="history-role">${msg.role}</span>${shortText}`;
                 groupDiv.appendChild(msgDiv);
             });
 
@@ -159,13 +162,12 @@ async function loadHistory() {
         }
 
     } catch (error) {
-        console.error("Error loading history from MongoDB:", error);
-        sessionHistory.innerHTML = '<div class="empty-state small"><p>Connection Error</p></div>';
+        console.error("Error loading history:", error);
+        sessionHistory.innerHTML = '<div class="empty-state small"><p>Error loading history.</p></div>';
     }
 }
 
-function addMessageToUI(role, text, save = true) {
-    // Remove empty state if it exists
+function addMessageToUI(role, text) {
     const emptyState = historyContainer.querySelector('.empty-state');
     if (emptyState) emptyState.remove();
 
@@ -191,20 +193,20 @@ function updateBubble(text) { bubbleText.textContent = text; }
 
 // --- UNIVERSAL CLOUD VOICE ENGINE ---
 function detectLanguage(text) {
-    if (/[\u0B80-\u0BFF]/.test(text)) return 'ta'; // Tamil
-    if (/[\u0900-\u097F]/.test(text)) return 'hi'; // Hindi
-    if (/[\u0980-\u09FF]/.test(text)) return 'bn'; // Bengali
-    if (/[\u0D00-\u0D7F]/.test(text)) return 'ml'; // Malayalam
-    if (/[\u0C00-\u0C7F]/.test(text)) return 'te'; // Telugu
-    if (/[\u0600-\u06FF]/.test(text)) return 'ar'; // Arabic
-    if (/[\u4E00-\u9FFF]/.test(text)) return 'zh'; // Chinese
-    if (/[\u3040-\u30FF]/.test(text)) return 'ja'; // Japanese
-    if (/[\uAC00-\uD7AF]/.test(text)) return 'ko'; // Korean
-    if (/[\u0400-\u04FF]/.test(text)) return 'ru'; // Russian
-    if (/[àâäçéèêëîïôöùûü]/i.test(text)) return 'fr'; // French
-    if (/[ñ¿¡]/i.test(text)) return 'es'; // Spanish
-    if (/[äöüß]/i.test(text)) return 'de'; // German
-    return 'en'; // Default English
+    if (/[\u0B80-\u0BFF]/.test(text)) return 'ta';
+    if (/[\u0900-\u097F]/.test(text)) return 'hi';
+    if (/[\u0980-\u09FF]/.test(text)) return 'bn';
+    if (/[\u0D00-\u0D7F]/.test(text)) return 'ml';
+    if (/[\u0C00-\u0C7F]/.test(text)) return 'te';
+    if (/[\u0600-\u06FF]/.test(text)) return 'ar';
+    if (/[\u4E00-\u9FFF]/.test(text)) return 'zh';
+    if (/[\u3040-\u30FF]/.test(text)) return 'ja';
+    if (/[\uAC00-\uD7AF]/.test(text)) return 'ko';
+    if (/[\u0400-\u04FF]/.test(text)) return 'ru';
+    if (/[àâäçéèêëîïôöùûü]/i.test(text)) return 'fr';
+    if (/[ñ¿¡]/i.test(text)) return 'es';
+    if (/[äöüß]/i.test(text)) return 'de';
+    return 'en';
 }
 
 async function speakResponse(text) {
@@ -214,7 +216,7 @@ async function speakResponse(text) {
     
     const langPrefix = detectLanguage(text);
     setAuraState('processing');
-    updateBubble("🎙️ Generating Voice...");
+    updateBubble("Generating voice...");
 
     try {
         const response = await fetch('https://aura-assistant-34ri.onrender.com/tts', {
@@ -234,7 +236,7 @@ async function speakResponse(text) {
         audioPlayer.onplay = () => {
             isSpeaking = true;
             setAuraState('speaking');
-            updateBubble("🔊 Speaking...");
+            updateBubble("Speaking...");
         };
         
         audioPlayer.onended = () => {
@@ -255,7 +257,7 @@ async function speakResponse(text) {
 
 function useFallbackVoice(text, langPrefix) {
     if (!window.speechSynthesis) {
-        updateBubble("⚠️ Voice Error");
+        updateBubble("Voice Error");
         setAuraState('idle');
         return;
     }
@@ -270,7 +272,7 @@ function useFallbackVoice(text, langPrefix) {
     utterance.onstart = () => { 
         isSpeaking = true;
         setAuraState('speaking'); 
-        updateBubble("🔊 Speaking..."); 
+        updateBubble("Speaking..."); 
     };
     utterance.onend = () => { 
         isSpeaking = false;
@@ -284,7 +286,7 @@ function useFallbackVoice(text, langPrefix) {
 async function sendToAI(text) {
     isProcessing = true;
     setAuraState('processing');
-    updateBubble("⚙️ Consulting 5 AIs...");
+    updateBubble("Consulting AIs...");
     
     try {
         const response = await fetch('https://aura-assistant-34ri.onrender.com/chat', {
@@ -293,10 +295,7 @@ async function sendToAI(text) {
             body: JSON.stringify({ text: text, userId: CURRENT_USER_ID })
         });
         
-        // SAFETY CHECK: If backend crashes (404/500), handle it gracefully
-        if (!response.ok) {
-            throw new Error(`Backend returned status: ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`Backend returned status: ${response.status}`);
 
         const data = await response.json();
         const aiReply = data.reply || "I'm sorry, I didn't get that.";
@@ -304,13 +303,12 @@ async function sendToAI(text) {
         addMessageToUI('assistant', aiReply);
         isProcessing = false;
         
-        // Trigger Cloud TTS
         await speakResponse(aiReply);
         
     } catch (error) {
         console.error("Error fetching AI:", error);
-        addMessageToUI('assistant', "Connection to the Neural Network was lost. Please try again in a moment.");
-        updateBubble("⚠️ Connection Error");
+        addMessageToUI('assistant', "Connection to the AI network was lost. Please try again.");
+        updateBubble("Connection Error");
         setAuraState('idle');
         isProcessing = false;
     }
@@ -321,7 +319,7 @@ if (recognition) {
     recognition.onstart = () => {
         isListening = true;
         setAuraState('listening');
-        updateBubble("🟡 Listening...");
+        updateBubble("Listening...");
     };
     recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript;
@@ -330,7 +328,7 @@ if (recognition) {
     };
     recognition.onerror = (event) => {
         console.error("Recognition error:", event.error);
-        updateBubble("⚠️ Mic Error");
+        updateBubble("Mic Error");
         setAuraState('idle');
     };
     recognition.onend = () => {
