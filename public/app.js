@@ -645,11 +645,18 @@ async function speakResponse(text) {
         const audioUrl = URL.createObjectURL(blob);
         audioPlayer.src = audioUrl;
         audioPlayer.onplay = () => { isSpeaking = true; setAuraState('speaking'); updateBubble("Speaking..."); };
-        audioPlayer.onended = () => {
-            isSpeaking = false;
-            setAuraState('idle');
-            restartWakeWord();
-        };
+       audioPlayer.onended = () => {
+    isSpeaking = false;
+    setAuraState('idle');
+
+    if (conversationMode) {
+        setTimeout(() => {
+            triggerCommandListening();
+        }, 500);
+    } else {
+        restartWakeWord();
+    }
+};
         await audioPlayer.play().catch(e => useFallbackVoice(text, langPrefix));
     } catch (error) {
         console.error("Cloud Voice Error. Falling back:", error.message);
