@@ -3,6 +3,7 @@ const auraRobot = document.getElementById('auraRobot');
 const speechBubble = document.getElementById('speechBubble');
 const bubbleText = document.getElementById('bubbleText');
 const historyContainer = document.getElementById('historyContainer');
+const sessionHistory = document.getElementById('sessionHistory');
 const authScreen = document.getElementById('auth-screen');
 const appContainer = document.getElementById('app-container');
 
@@ -12,98 +13,159 @@ let isProcessing = false;
 let isSpeaking = false;
 let CURRENT_USER_ID = null;
 
-// Audio Player for Cloud TTS
 let audioPlayer = new Audio();
 
-// --- FIREBASE AUTH EVENTS ---
+// --- LIVE TIME & WEATHER WIDGET ---
+function updateTime() {
+    const now = new Date();
+    document.getElementById('live-time').textContent = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+    document.getElementById('live-date').textContent = now.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+}
 
-// Handle Email/Password Sign Up or Login
+async function loadWeather() {
+    try {
+        // Using Open-Meteo (Free, no API key needed). Coordinates set to Delhi, India
+        const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=28.6139&longitude=77.2090&current_weather=true');
+        const data = await res.json();
+        const temp = Math.round(data.current_weather.temperature);
+        const code = data.current_weather.weathercode;
+        
+        let desc = "Clear";
+        if (code >= 51 && code <= 67) desc = "Rainy";
+        else if (code >= 71 && code <= 77) desc = "Snow";
+        else if (code >= 80 && code <= 82) desc = "Showers";
+        else if (code >= 95) desc = "Storm";
+        
+        document.getElementById('weather-temp').textContent = `${temp}°C`;
+        document.getElementById('weather-desc').textContent = desc;
+    } catch(e) {
+        document.getElementById('weather-desc').textContent = "Offline";
+    }
+}
+
+// Run widgets immediately and set intervals
+updateTime();
+loadWeather();
+setInterval(updateTime, 1000);
+setInterval(loadWeather, 600000); // Update weather every 10 mins
+
+
+// --- FIREBASE AUTH EVENTS ---
 document.getElementById('signup-btn').addEventListener('click', () => {
     const email = document.getElementById('email-input').value;
     const password = document.getElementById('password-input').value;
-    
     if (!email || !password) return alert("Please enter email and password");
-
-    // Try to sign in. If user doesn't exist, sign them up.
     window.firebaseAuth.signInWithEmailAndPassword(window.firebaseAuth.auth, email, password)
         .catch((error) => {
             if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
                 window.firebaseAuth.createUserWithEmailAndPassword(window.firebaseAuth.auth, email, password)
                     .catch(err => alert(err.message));
-            } else {
-                alert(error.message);
-            }
+            } else { alert(error.message); }
         });
 });
 
-// Handle Google Login
 document.getElementById('google-btn').addEventListener('click', () => {
     window.firebaseAuth.signInWithPopup(window.firebaseAuth.auth, window.firebaseAuth.provider)
         .catch(err => alert(err.message));
 });
 
-// Handle Logout
 document.getElementById('logout-btn').addEventListener('click', () => {
     window.firebaseAuth.signOut(window.firebaseAuth.auth);
 });
 
-// Auth State Observer (Triggers automatically when user logs in or out)
 window.firebaseAuth.onAuthStateChanged(window.firebaseAuth.auth, (user) => {
     if (user) {
-        // User is logged in!
-        CURRENT_USER_ID = user.uid; // Use Firebase UID for MongoDB
+        CURRENT_USER_ID = user.uid;
         authScreen.style.display = 'none';
         appContainer.style.display = 'flex';
-        loadHistory(); // Fetch this user's chat history from MongoDB
+        loadHistory();
     } else {
-        // User is logged out!
         CURRENT_USER_ID = null;
         authScreen.style.display = 'flex';
         appContainer.style.display = 'none';
-        historyContainer.innerHTML = ''; // Clear UI
+        historyContainer.innerHTML = '<div class="empty-state"><div class="empty-robot">🤖</div><p>NEURAL CORE ONLINE</p><span>Tap the orb below to communicate</span></div>';
+        sessionHistory.innerHTML = '<div class="empty-state small"><p>Loading archives...</p></div>';
     }
 });
-
 
 // --- SPEECH RECOGNITION SETUP ---
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const recognition = SpeechRecognition ? new SpeechRecognition() : null;
-
 if (recognition) {
     recognition.continuous = false;
     recognition.interimResults = false;
-    recognition.lang = 'en-IN'; // Set to Indian English to better understand diverse accents
+    recognition.lang = 'en-IN'; 
 } else {
     alert("Your browser doesn't support Speech Recognition. Please use Chrome or Edge.");
 }
 
-
-// --- MONGODB HISTORY MANAGEMENT (via Backend API) ---
-
+// --- MONGODB HISTORY MANAGEMENT ---
 async function loadHistory() {
     if (!CURRENT_USER_ID) return;
     try {
-        // Live Render backend URL
         const response = await fetch(`https://aura-assistant-34ri.onrender.com/history/${CURRENT_USER_ID}`);
         const history = await response.json();
         
-        // SAFETY CHECK: Ensure history is an array before using forEach
         if (!Array.isArray(history)) {
-            console.error("Expected array but got:", history);
+            sessionHistory.innerHTML = '<div class="empty-state small"><p>Error loading logs.</p></div>';
             return;
         }
         
-        historyContainer.innerHTML = '';
-        history.forEach(msg => addMessageToUI(msg.role, msg.text, false));
-        historyContainer.scrollTop = historyContainer.scrollHeight;
+        // Clear previous logs
+        sessionHistory.innerHTML = '';
+        
+        if (history.length === 0) {
+            sessionHistory.innerHTML = '<div class="empty-state small"><p>NO ARCHIVES FOUND</p></div>';
+            return;
+        }
+
+        // Group history by date
+        const groups = {};
+        const today = new Date().setHours(0,0,0,0);
+        const yesterday = today - (24 * 60 * 60 * 1000);
+
+        history.forEach(msg => {
+            const d = new Date(msg.timestamp).setHours(0,0,0,0);
+            let label;
+            if (d === today) label = "TODAY";
+            else if (d === yesterday) label = "YESTERDAY";
+            else label = new Date(msg.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+            
+            if (!groups[label]) groups[label] = [];
+            groups[label].push(msg);
+        });
+
+        // Render grouped history into the Archive Logs section
+        for (const dateLabel in groups) {
+            const groupDiv = document.createElement('div');
+            groupDiv.className = 'history-day-group';
+            
+            const headerDiv = document.createElement('div');
+            headerDiv.className = 'history-day-header';
+            headerDiv.textContent = dateLabel;
+            groupDiv.appendChild(headerDiv);
+
+            groups[dateLabel].forEach(msg => {
+                const msgDiv = document.createElement('div');
+                msgDiv.className = `history-msg ${msg.role}`;
+                // Truncate long messages for the sidebar view
+                const shortText = msg.text.substring(0, 150) + (msg.text.length > 150 ? '...' : '');
+                msgDiv.innerHTML = `<span class="history-role">${msg.role.toUpperCase()}</span>${shortText}`;
+                groupDiv.appendChild(msgDiv);
+            });
+
+            sessionHistory.appendChild(groupDiv);
+        }
+
     } catch (error) {
         console.error("Error loading history from MongoDB:", error);
+        sessionHistory.innerHTML = '<div class="empty-state small"><p>Connection Error</p></div>';
     }
 }
 
 function addMessageToUI(role, text, save = true) {
-    // Remove empty state graphic if it exists
-    const emptyState = document.querySelector('.empty-state');
+    // Remove empty state if it exists
+    const emptyState = historyContainer.querySelector('.empty-state');
     if (emptyState) emptyState.remove();
 
     const msgDiv = document.createElement('div');
@@ -111,11 +173,12 @@ function addMessageToUI(role, text, save = true) {
     msgDiv.textContent = text;
     historyContainer.appendChild(msgDiv);
     historyContainer.scrollTop = historyContainer.scrollHeight;
+    
+    // Note: We don't manually append to sessionHistory here. 
+    // When the user refreshes, loadHistory() will fetch the new logs from DB.
 }
 
-
 // --- AURA ROBOT ANIMATIONS & STATES ---
-
 function setAuraState(state) {
     auraRobot.classList.remove('listening', 'processing', 'speaking');
     if (state === 'idle') {
@@ -126,13 +189,9 @@ function setAuraState(state) {
     }
 }
 
-function updateBubble(text) { 
-    bubbleText.textContent = text; 
-}
+function updateBubble(text) { bubbleText.textContent = text; }
 
-
-// --- UNIVERSAL CLOUD VOICE ENGINE (ALL LANGUAGES) ---
-
+// --- UNIVERSAL CLOUD VOICE ENGINE ---
 function detectLanguage(text) {
     if (/[\u0B80-\u0BFF]/.test(text)) return 'ta'; // Tamil
     if (/[\u0900-\u097F]/.test(text)) return 'hi'; // Hindi
@@ -152,28 +211,22 @@ function detectLanguage(text) {
 
 async function speakResponse(text) {
     if (!text) return;
-    
-    // Stop any ongoing audio or local speech synthesis
     audioPlayer.pause();
     if (window.speechSynthesis) window.speechSynthesis.cancel();
     
     const langPrefix = detectLanguage(text);
-    
     setAuraState('processing');
     updateBubble("🎙️ Generating Voice...");
 
     try {
-        // Ask backend to generate Cloud TTS audio
         const response = await fetch('https://aura-assistant-34ri.onrender.com/tts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text, lang: langPrefix })
         });
 
-        // If backend returns 204 (Cloud TTS failed), throw error to trigger fallback
         if (response.status === 204 || !response.ok) throw new Error("Cloud TTS unavailable");
 
-        // Convert response to an audio MP3 blob
         const blob = await response.blob();
         if (blob.size < 100) throw new Error("Audio file is empty");
 
@@ -191,7 +244,6 @@ async function speakResponse(text) {
             setAuraState('idle');
         };
 
-        // Play the high-quality cloud voice! Catch browser autoplay blocks.
         await audioPlayer.play().catch(e => {
             console.error("Browser blocked autoplay:", e);
             useFallbackVoice(text, langPrefix);
@@ -199,12 +251,10 @@ async function speakResponse(text) {
         
     } catch (error) {
         console.error("Cloud Voice Error. Falling back to local voice:", error.message);
-        // FALLBACK: Use the browser's built-in voice if cloud fails
         useFallbackVoice(text, langPrefix);
     }
 }
 
-// Fallback Local Voice Function (Uses Browser's Built-in Voices)
 function useFallbackVoice(text, langPrefix) {
     if (!window.speechSynthesis) {
         updateBubble("⚠️ Voice Error");
@@ -224,7 +274,6 @@ function useFallbackVoice(text, langPrefix) {
         setAuraState('speaking'); 
         updateBubble("🔊 Speaking..."); 
     };
-    
     utterance.onend = () => { 
         isSpeaking = false;
         setAuraState('idle'); 
@@ -233,16 +282,13 @@ function useFallbackVoice(text, langPrefix) {
     window.speechSynthesis.speak(utterance);
 }
 
-
 // --- SEND TO MULTI-AI BACKEND ---
-
 async function sendToAI(text) {
     isProcessing = true;
     setAuraState('processing');
     updateBubble("⚙️ Consulting 5 AIs...");
     
     try {
-        // Live Render backend URL
         const response = await fetch('https://aura-assistant-34ri.onrender.com/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -255,7 +301,6 @@ async function sendToAI(text) {
         addMessageToUI('assistant', aiReply);
         isProcessing = false;
         
-        // Trigger Cloud TTS
         await speakResponse(aiReply);
         
     } catch (error) {
@@ -266,41 +311,33 @@ async function sendToAI(text) {
     }
 }
 
-
-// --- SPEECH RECOGNITION EVENT HANDLERS ---
-
+// --- SPEECH RECOGNITION HANDLERS ---
 if (recognition) {
     recognition.onstart = () => {
         isListening = true;
         setAuraState('listening');
         updateBubble("🟡 Listening...");
     };
-
     recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript;
         addMessageToUI('user', transcript);
         sendToAI(transcript);
     };
-
     recognition.onerror = (event) => {
         console.error("Recognition error:", event.error);
         updateBubble("⚠️ Mic Error");
         setAuraState('idle');
     };
-
     recognition.onend = () => {
         isListening = false;
         if (!isProcessing && !isSpeaking) setAuraState('idle');
     };
 }
 
-
 // --- AURA ROBOT CLICK EVENT ---
-
 auraRobot.addEventListener('click', () => {
     if (!CURRENT_USER_ID) return alert("Please login first.");
     
-    // If AURA is busy, force stop everything
     if (isListening || isProcessing || isSpeaking) {
         if (isListening) recognition.stop();
         if (isSpeaking) {
@@ -311,11 +348,7 @@ auraRobot.addEventListener('click', () => {
         return;
     }
     
-    // Start listening
-    if (recognition) {
-        recognition.start();
-    }
+    if (recognition) recognition.start();
 });
 
-// Initialize default state on load
 setAuraState('idle');
