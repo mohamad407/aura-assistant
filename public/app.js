@@ -12,25 +12,16 @@ let isListening = false;
 let isProcessing = false;
 let isSpeaking = false;
 let CURRENT_USER_ID = null;
-
-// Audio Player for Cloud TTS
 let audioPlayer = new Audio();
 
 // --- TAB NAVIGATION ---
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-        // Remove active from all
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        
-        // Hide all views
         document.querySelectorAll('.view-container').forEach(view => view.style.display = 'none');
-        
-        // Show selected view
         const tab = btn.getAttribute('data-tab');
         document.getElementById(`view-${tab}`).style.display = 'block';
-        
-        // If switching to history, refresh it
         if (tab === 'history') loadHistory();
     });
 });
@@ -41,31 +32,18 @@ function updateTime() {
     document.getElementById('live-time').textContent = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
     document.getElementById('live-date').textContent = now.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
 }
-
 async function loadWeather() {
     try {
         const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=28.6139&longitude=77.2090&current_weather=true');
         const data = await res.json();
-        const temp = Math.round(data.current_weather.temperature);
-        const code = data.current_weather.weathercode;
-        
+        document.getElementById('weather-temp').textContent = `${Math.round(data.current_weather.temperature)}°`;
         let desc = "Clear";
-        if (code >= 51 && code <= 67) desc = "Rain";
-        else if (code >= 71 && code <= 77) desc = "Snow";
-        else if (code >= 80 && code <= 82) desc = "Showers";
-        else if (code >= 95) desc = "Storm";
-        
-        document.getElementById('weather-temp').textContent = `${temp}°`;
+        if (data.current_weather.weathercode >= 51) desc = "Rain";
         document.getElementById('weather-desc').textContent = desc;
-    } catch(e) {
-        document.getElementById('weather-desc').textContent = "N/A";
-    }
+    } catch(e) { document.getElementById('weather-desc').textContent = "N/A"; }
 }
-
-updateTime();
-loadWeather();
-setInterval(updateTime, 1000);
-setInterval(loadWeather, 600000);
+updateTime(); loadWeather();
+setInterval(updateTime, 1000); setInterval(loadWeather, 600000);
 
 // --- FIREBASE AUTH EVENTS ---
 document.getElementById('signup-btn').addEventListener('click', () => {
@@ -80,15 +58,11 @@ document.getElementById('signup-btn').addEventListener('click', () => {
             } else { alert(error.message); }
         });
 });
-
 document.getElementById('google-btn').addEventListener('click', () => {
     window.firebaseAuth.signInWithPopup(window.firebaseAuth.auth, window.firebaseAuth.provider)
         .catch(err => alert(err.message));
 });
-
-document.getElementById('logout-btn').addEventListener('click', () => {
-    window.firebaseAuth.signOut(window.firebaseAuth.auth);
-});
+document.getElementById('logout-btn').addEventListener('click', () => window.firebaseAuth.signOut(window.firebaseAuth.auth));
 
 window.firebaseAuth.onAuthStateChanged(window.firebaseAuth.auth, (user) => {
     if (user) {
@@ -116,7 +90,6 @@ async function loadHistory() {
     if (!CURRENT_USER_ID) return;
     try {
         sessionHistory.innerHTML = '<div class="empty-state small"><p>Loading history...</p></div>';
-        
         const response = await fetch(`https://aura-assistant-34ri.onrender.com/history/${CURRENT_USER_ID}`);
         const history = await response.json();
         
@@ -136,7 +109,6 @@ async function loadHistory() {
             if (d === today) label = "Today";
             else if (d === yesterday) label = "Yesterday";
             else label = new Date(msg.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
-            
             if (!groups[label]) groups[label] = [];
             groups[label].push(msg);
         });
@@ -147,22 +119,28 @@ async function loadHistory() {
             
             const headerDiv = document.createElement('div');
             headerDiv.className = 'history-day-header';
-            headerDiv.textContent = dateLabel;
+            headerDiv.textContent = `📅 ${dateLabel}`;
+            
+            // CLICK EVENT: Load this day's chat into the main Chat tab
+            headerDiv.addEventListener('click', () => {
+                historyContainer.innerHTML = ''; // Clear main chat
+                groups[dateLabel].forEach(m => addMessageToUI(m.role, m.text));
+                document.querySelector('.tab-btn[data-tab="chat"]').click(); // Switch to chat tab
+            });
+            
             groupDiv.appendChild(headerDiv);
 
             groups[dateLabel].forEach(msg => {
                 const msgDiv = document.createElement('div');
                 msgDiv.className = `history-msg ${msg.role}`;
-                const shortText = msg.text.substring(0, 200) + (msg.text.length > 200 ? '...' : '');
+                const shortText = msg.text.substring(0, 100) + (msg.text.length > 100 ? '...' : '');
                 msgDiv.innerHTML = `<span class="history-role">${msg.role}</span>${shortText}`;
                 groupDiv.appendChild(msgDiv);
             });
 
             sessionHistory.appendChild(groupDiv);
         }
-
     } catch (error) {
-        console.error("Error loading history:", error);
         sessionHistory.innerHTML = '<div class="empty-state small"><p>Error loading history.</p></div>';
     }
 }
@@ -181,14 +159,9 @@ function addMessageToUI(role, text) {
 // --- AURA ROBOT ANIMATIONS & STATES ---
 function setAuraState(state) {
     auraRobot.classList.remove('listening', 'processing', 'speaking');
-    if (state === 'idle') {
-        speechBubble.classList.remove('active');
-    } else {
-        auraRobot.classList.add(state);
-        speechBubble.classList.add('active');
-    }
+    if (state === 'idle') speechBubble.classList.remove('active');
+    else { auraRobot.classList.add(state); speechBubble.classList.add('active'); }
 }
-
 function updateBubble(text) { bubbleText.textContent = text; }
 
 // --- UNIVERSAL CLOUD VOICE ENGINE ---
@@ -224,61 +197,30 @@ async function speakResponse(text) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text, lang: langPrefix })
         });
-
         if (response.status === 204 || !response.ok) throw new Error("Cloud TTS unavailable");
-
         const blob = await response.blob();
         if (blob.size < 100) throw new Error("Audio file is empty");
 
         const audioUrl = URL.createObjectURL(blob);
         audioPlayer.src = audioUrl;
-        
-        audioPlayer.onplay = () => {
-            isSpeaking = true;
-            setAuraState('speaking');
-            updateBubble("Speaking...");
-        };
-        
-        audioPlayer.onended = () => {
-            isSpeaking = false;
-            setAuraState('idle');
-        };
-
-        await audioPlayer.play().catch(e => {
-            console.error("Browser blocked autoplay:", e);
-            useFallbackVoice(text, langPrefix);
-        });
-        
+        audioPlayer.onplay = () => { isSpeaking = true; setAuraState('speaking'); updateBubble("Speaking..."); };
+        audioPlayer.onended = () => { isSpeaking = false; setAuraState('idle'); };
+        await audioPlayer.play().catch(e => useFallbackVoice(text, langPrefix));
     } catch (error) {
-        console.error("Cloud Voice Error. Falling back to local voice:", error.message);
+        console.error("Cloud Voice Error. Falling back:", error.message);
         useFallbackVoice(text, langPrefix);
     }
 }
 
 function useFallbackVoice(text, langPrefix) {
-    if (!window.speechSynthesis) {
-        updateBubble("Voice Error");
-        setAuraState('idle');
-        return;
-    }
-    
+    if (!window.speechSynthesis) { updateBubble("Voice Error"); setAuraState('idle'); return; }
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = langPrefix === 'en' ? 'en-US' : langPrefix;
-    
     const voices = window.speechSynthesis.getVoices();
     const matchedVoice = voices.find(v => v.lang.startsWith(langPrefix));
     if (matchedVoice) utterance.voice = matchedVoice;
-    
-    utterance.onstart = () => { 
-        isSpeaking = true;
-        setAuraState('speaking'); 
-        updateBubble("Speaking..."); 
-    };
-    utterance.onend = () => { 
-        isSpeaking = false;
-        setAuraState('idle'); 
-    };
-    
+    utterance.onstart = () => { isSpeaking = true; setAuraState('speaking'); updateBubble("Speaking..."); };
+    utterance.onend = () => { isSpeaking = false; setAuraState('idle'); };
     window.speechSynthesis.speak(utterance);
 }
 
@@ -294,21 +236,39 @@ async function sendToAI(text) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text: text, userId: CURRENT_USER_ID })
         });
-        
-        if (!response.ok) throw new Error(`Backend returned status: ${response.status}`);
-
+        if (!response.ok) throw new Error(`Backend error: ${response.status}`);
         const data = await response.json();
-        const aiReply = data.reply || "I'm sorry, I didn't get that.";
+        let aiReply = data.reply || "I'm sorry, I didn't get that.";
+        
+        // ACTION PARSER (Open Apps / Call)
+        if (aiReply.includes("ACTION: URL:")) {
+            const urlMatch = aiReply.match(/ACTION:\s*URL:\s*([^\s]+)/i);
+            if (urlMatch && urlMatch[1]) {
+                const actionUrl = urlMatch[1].trim();
+                
+                let friendlyMsg = "Opening the requested application...";
+                if (actionUrl.startsWith("tel:")) friendlyMsg = "Opening your phone dialer...";
+                if (actionUrl.startsWith("sms:")) friendlyMsg = "Opening your messaging app...";
+                if (actionUrl.includes("youtube.com")) friendlyMsg = "Opening YouTube...";
+                if (actionUrl.includes("whatsapp.com")) friendlyMsg = "Opening WhatsApp...";
+                
+                addMessageToUI('assistant', friendlyMsg);
+                await speakResponse(friendlyMsg);
+                
+                setTimeout(() => { window.open(actionUrl, '_blank'); }, 1000);
+                isProcessing = false;
+                return;
+            }
+        }
         
         addMessageToUI('assistant', aiReply);
         isProcessing = false;
-        
         await speakResponse(aiReply);
         
     } catch (error) {
         console.error("Error fetching AI:", error);
-        addMessageToUI('assistant', "Connection to the AI network was lost. Please try again.");
-        updateBubble("Connection Error");
+        addMessageToUI('assistant', "Connection lost. Please try again.");
+        updateBubble("Error");
         setAuraState('idle');
         isProcessing = false;
     }
@@ -316,41 +276,25 @@ async function sendToAI(text) {
 
 // --- SPEECH RECOGNITION HANDLERS ---
 if (recognition) {
-    recognition.onstart = () => {
-        isListening = true;
-        setAuraState('listening');
-        updateBubble("Listening...");
-    };
+    recognition.onstart = () => { isListening = true; setAuraState('listening'); updateBubble("Listening..."); };
     recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript;
         addMessageToUI('user', transcript);
         sendToAI(transcript);
     };
-    recognition.onerror = (event) => {
-        console.error("Recognition error:", event.error);
-        updateBubble("Mic Error");
-        setAuraState('idle');
-    };
-    recognition.onend = () => {
-        isListening = false;
-        if (!isProcessing && !isSpeaking) setAuraState('idle');
-    };
+    recognition.onerror = (event) => { updateBubble("Mic Error"); setAuraState('idle'); };
+    recognition.onend = () => { isListening = false; if (!isProcessing && !isSpeaking) setAuraState('idle'); };
 }
 
 // --- AURA ROBOT CLICK EVENT ---
 auraRobot.addEventListener('click', () => {
     if (!CURRENT_USER_ID) return alert("Please login first.");
-    
     if (isListening || isProcessing || isSpeaking) {
         if (isListening) recognition.stop();
-        if (isSpeaking) {
-            audioPlayer.pause();
-            if (window.speechSynthesis) window.speechSynthesis.cancel();
-        }
+        if (isSpeaking) { audioPlayer.pause(); if (window.speechSynthesis) window.speechSynthesis.cancel(); }
         setAuraState('idle');
         return;
     }
-    
     if (recognition) recognition.start();
 });
 
