@@ -56,7 +56,15 @@ async function getConsensusAnswer(prompt) {
                     model: ai.model,
                     messages: [{ role: "user", content: prompt }],
                 });
-                return { name: ai.name, text: completion.choices[0].message.content };
+                
+                let text = completion.choices[0].message.content;
+                
+                // SAFETY CHECK: Truncate long responses to prevent Judge AI token limit crash
+                if (text.length > 1500) {
+                    text = text.substring(0, 1500) + "\n\n... (code truncated for processing)";
+                }
+                
+                return { name: ai.name, text: text };
             } catch (err) {
                 console.error(`Error with ${ai.name}:`, err.message);
                 return { name: ai.name, text: "Error generating response." };
@@ -78,7 +86,7 @@ async function getConsensusAnswer(prompt) {
         
     } catch (error) {
         console.error("Consensus Engine Error:", error);
-        return "I encountered an error while consulting my AI network.";
+        return "I encountered an error while consulting my AI network. The request may have been too large. Please try asking for a smaller piece of code or a more specific question.";
     }
 }
 
