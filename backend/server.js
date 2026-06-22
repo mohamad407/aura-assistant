@@ -83,23 +83,53 @@ async function getConsensusAnswer(prompt) {
 }
 
 // ==========================================
-// 🎙️ CLOUD TEXT-TO-SPEECH ENGINE (Google TTS)
+// 🎙️ CLOUD TEXT-TO-SPEECH ENGINE (Google TTS - Chunked)
 // ==========================================
+
+// Helper function to split text into chunks under 200 characters
+function splitTextIntoChunks(text, maxLength = 150) {
+    const words = text.split(' ');
+    const chunks = [];
+    let currentChunk = "";
+
+    for (const word of words) {
+        if ((currentChunk + " " + word).length > maxLength) {
+            chunks.push(currentChunk.trim());
+            currentChunk = word;
+        } else {
+            currentChunk += " " + word;
+        }
+    }
+    if (currentChunk.trim()) chunks.push(currentChunk.trim());
+    return chunks;
+}
 
 app.post('/tts', async (req, res) => {
     const { text, lang } = req.body;
     try {
-        const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=${lang}&client=tw-ob`;
-        
-        const response = await axios.get(url, {
-            responseType: 'arraybuffer',
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-        });
+        // 1. Split text into safe chunks to bypass Google's 200 char limit
+        const chunks = splitTextIntoChunks(text);
+        const audioBuffers = [];
+
+        // 2. Fetch audio for each chunk
+        for (const chunk of chunks) {
+            const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(chunk)}&tl=${lang}&client=tw-ob`;
+            
+            const response = await axios.get(url, {
+                responseType: 'arraybuffer',
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
+            });
+            audioBuffers.push(Buffer.from(response.data));
+        }
+
+        // 3. Combine all chunks into one MP3 buffer
+        const finalBuffer = Buffer.concat(audioBuffers);
 
         res.set('Content-Type', 'audio/mpeg');
-        res.send(response.data);
+        res.send(finalBuffer);
+        
     } catch (error) {
         console.error("TTS Axios Error:", error.message);
         res.status(204).send(); // 204 tells frontend to use fallback voice
