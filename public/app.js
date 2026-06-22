@@ -87,18 +87,61 @@ if (recognition) {
     recognition.lang = 'en-IN'; 
 }
 
+// --- SIRI-LEVEL FEATURES (Wake Lock, Haptics, Chimes) ---
+let wakeLock = null;
+
+// Keep the screen on while Hands-Free mode is active
+async function requestWakeLock() {
+    try {
+        wakeLock = await navigator.wakeLock.request('screen');
+        console.log("Screen will stay awake.");
+    } catch (err) {
+        console.error("Wake Lock failed:", err);
+    }
+}
+
+function releaseWakeLock() {
+    if (wakeLock !== null) {
+        wakeLock.release().then(() => wakeLock = null);
+    }
+}
+
+// Vibrate the phone
+function hapticFeedback(duration = 50) {
+    if (navigator.vibrate) navigator.vibrate(duration);
+}
+
+// Play a subtle chime sound (Siri-like)
+let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function playChime(freq = 440, duration = 150) {
+    let oscillator = audioCtx.createOscillator();
+    let gainNode = audioCtx.createGain();
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    oscillator.frequency.value = freq;
+    oscillator.type = 'sine';
+    gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    oscillator.start();
+    setTimeout(() => oscillator.stop(), duration);
+}
+
 // --- HANDS-FREE TOGGLE LOGIC ---
 document.getElementById('wakeModeToggle').addEventListener('change', (e) => {
     wakeModeEnabled = e.target.checked;
     if (wakeModeEnabled) {
-        // Start listening immediately
+        requestWakeLock(); // Keep screen on
+        playChime(600, 100); // Startup sound
+        hapticFeedback(30); // Subtle vibration
+        
         if (recognition && !isListening && !isProcessing && !isSpeaking) {
             recognition.start();
         }
         updateBubble("Hands-Free Active. Say 'AURA'...");
         speechBubble.classList.add('active');
     } else {
-        // Stop listening
+        releaseWakeLock(); // Allow screen to turn off
+        playChime(400, 100); // Shutdown sound
+        
         if (isListening) recognition.stop();
         speechBubble.classList.remove('active');
     }
@@ -111,6 +154,7 @@ if (recognition) {
         if (!wakeModeEnabled) {
             setAuraState('listening');
             updateBubble("Listening...");
+            playChime(800, 100);
         }
     };
 
@@ -121,32 +165,28 @@ if (recognition) {
         }
         transcript = transcript.toLowerCase().trim();
 
-        // WAKE WORD DETECTION
         if (wakeModeEnabled) {
-            // Check if the user said "aura"
             if (transcript.includes('aura')) {
-                // Extract the command after the word "aura"
+                hapticFeedback([50, 50, 50]); // Double buzz when wake word heard
+                playChime(800, 150); // Chime to tell user "I am listening"
+                
                 let command = transcript.split('aura')[1].trim();
                 
                 if (command.length > 0) {
-                    // User said "AURA, what is the weather"
-                    recognition.stop(); // Stop listening to process command
+                    recognition.stop();
                     addMessageToUI('user', command);
                     sendToAI(command);
                 } else {
-                    // User just said "AURA"
                     recognition.stop();
                     setAuraState('listening');
                     updateBubble("Yes? I'm listening...");
                     
-                    // Restart recognition to catch the actual command
                     setTimeout(() => {
                         if (wakeModeEnabled && !isProcessing) recognition.start();
                     }, 500);
                 }
             }
         } else {
-            // NORMAL TAP-TO-SPEAK MODE
             if (event.results[event.results.length - 1].isFinal) {
                 addMessageToUI('user', transcript);
                 sendToAI(transcript);
@@ -165,10 +205,9 @@ if (recognition) {
     recognition.onend = () => {
         isListening = false;
         
-        // If Hands-Free mode is on, automatically restart listening
         if (wakeModeEnabled && !isProcessing && !isSpeaking) {
             try {
-                recognition.start();
+                recognition.start(); // Auto-restart for continuous listening
             } catch (e) {
                 console.log("Restarting recognition...");
             }
@@ -177,7 +216,6 @@ if (recognition) {
         }
     };
 }
-
 // Update the AURA ROBOT CLICK EVENT to handle Hands-Free mode
 auraRobot.addEventListener('click', () => {
     if (!CURRENT_USER_ID) return alert("Please login first.");
