@@ -79,223 +79,124 @@ window.firebaseAuth.onAuthStateChanged(window.firebaseAuth.auth, (user) => {
 // --- SPEECH RECOGNITION SETUP ---
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const recognition = SpeechRecognition ? new SpeechRecognition() : null;
+let wakeModeEnabled = false;
+
 if (recognition) {
-    recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.continuous = true; // Must be true to keep listening for the wake word
+    recognition.interimResults = true; // We need interim results to catch the wake word fast
     recognition.lang = 'en-IN'; 
 }
 
-// --- MONGODB HISTORY MANAGEMENT ---
-async function loadHistory() {
-    if (!CURRENT_USER_ID) return;
-    try {
-        sessionHistory.innerHTML = '<div class="empty-state small"><p>Loading history...</p></div>';
-        const response = await fetch(`https://aura-assistant-34ri.onrender.com/history/${CURRENT_USER_ID}`);
-        const history = await response.json();
-        
-        if (!Array.isArray(history) || history.length === 0) {
-            sessionHistory.innerHTML = '<div class="empty-state small"><p>No conversation history yet.</p></div>';
-            return;
+// --- HANDS-FREE TOGGLE LOGIC ---
+document.getElementById('wakeModeToggle').addEventListener('change', (e) => {
+    wakeModeEnabled = e.target.checked;
+    if (wakeModeEnabled) {
+        // Start listening immediately
+        if (recognition && !isListening && !isProcessing && !isSpeaking) {
+            recognition.start();
         }
-        
-        sessionHistory.innerHTML = '';
-        const groups = {};
-        const today = new Date().setHours(0,0,0,0);
-        const yesterday = today - (24 * 60 * 60 * 1000);
+        updateBubble("Hands-Free Active. Say 'AURA'...");
+        speechBubble.classList.add('active');
+    } else {
+        // Stop listening
+        if (isListening) recognition.stop();
+        speechBubble.classList.remove('active');
+    }
+});
 
-        history.forEach(msg => {
-            const d = new Date(msg.timestamp).setHours(0,0,0,0);
-            let label;
-            if (d === today) label = "Today";
-            else if (d === yesterday) label = "Yesterday";
-            else label = new Date(msg.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
-            if (!groups[label]) groups[label] = [];
-            groups[label].push(msg);
-        });
-
-        for (const dateLabel in groups) {
-            const groupDiv = document.createElement('div');
-            groupDiv.className = 'history-day-group';
-            
-            const headerDiv = document.createElement('div');
-            headerDiv.className = 'history-day-header';
-            headerDiv.textContent = `📅 ${dateLabel}`;
-            
-            // CLICK EVENT: Load this day's chat into the main Chat tab
-            headerDiv.addEventListener('click', () => {
-                historyContainer.innerHTML = ''; // Clear main chat
-                groups[dateLabel].forEach(m => addMessageToUI(m.role, m.text));
-                document.querySelector('.tab-btn[data-tab="chat"]').click(); // Switch to chat tab
-            });
-            
-            groupDiv.appendChild(headerDiv);
-
-            groups[dateLabel].forEach(msg => {
-                const msgDiv = document.createElement('div');
-                msgDiv.className = `history-msg ${msg.role}`;
-                const shortText = msg.text.substring(0, 100) + (msg.text.length > 100 ? '...' : '');
-                msgDiv.innerHTML = `<span class="history-role">${msg.role}</span>${shortText}`;
-                groupDiv.appendChild(msgDiv);
-            });
-
-            sessionHistory.appendChild(groupDiv);
+// --- SPEECH RECOGNITION EVENT HANDLERS ---
+if (recognition) {
+    recognition.onstart = () => {
+        isListening = true;
+        if (!wakeModeEnabled) {
+            setAuraState('listening');
+            updateBubble("Listening...");
         }
-    } catch (error) {
-        sessionHistory.innerHTML = '<div class="empty-state small"><p>Error loading history.</p></div>';
-    }
-}
+    };
 
-function addMessageToUI(role, text) {
-    const emptyState = historyContainer.querySelector('.empty-state');
-    if (emptyState) emptyState.remove();
+    recognition.onresult = (event) => {
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            transcript += event.results[i][0].transcript;
+        }
+        transcript = transcript.toLowerCase().trim();
 
-    const msgDiv = document.createElement('div');
-    msgDiv.classList.add('message', role);
-    msgDiv.textContent = text;
-    historyContainer.appendChild(msgDiv);
-    historyContainer.scrollTop = historyContainer.scrollHeight;
-}
-
-// --- AURA ROBOT ANIMATIONS & STATES ---
-function setAuraState(state) {
-    auraRobot.classList.remove('listening', 'processing', 'speaking');
-    if (state === 'idle') speechBubble.classList.remove('active');
-    else { auraRobot.classList.add(state); speechBubble.classList.add('active'); }
-}
-function updateBubble(text) { bubbleText.textContent = text; }
-
-// --- UNIVERSAL CLOUD VOICE ENGINE ---
-function detectLanguage(text) {
-    if (/[\u0B80-\u0BFF]/.test(text)) return 'ta';
-    if (/[\u0900-\u097F]/.test(text)) return 'hi';
-    if (/[\u0980-\u09FF]/.test(text)) return 'bn';
-    if (/[\u0D00-\u0D7F]/.test(text)) return 'ml';
-    if (/[\u0C00-\u0C7F]/.test(text)) return 'te';
-    if (/[\u0600-\u06FF]/.test(text)) return 'ar';
-    if (/[\u4E00-\u9FFF]/.test(text)) return 'zh';
-    if (/[\u3040-\u30FF]/.test(text)) return 'ja';
-    if (/[\uAC00-\uD7AF]/.test(text)) return 'ko';
-    if (/[\u0400-\u04FF]/.test(text)) return 'ru';
-    if (/[àâäçéèêëîïôöùûü]/i.test(text)) return 'fr';
-    if (/[ñ¿¡]/i.test(text)) return 'es';
-    if (/[äöüß]/i.test(text)) return 'de';
-    return 'en';
-}
-
-async function speakResponse(text) {
-    if (!text) return;
-    audioPlayer.pause();
-    if (window.speechSynthesis) window.speechSynthesis.cancel();
-    
-    const langPrefix = detectLanguage(text);
-    setAuraState('processing');
-    updateBubble("Generating voice...");
-
-    try {
-        const response = await fetch('https://aura-assistant-34ri.onrender.com/tts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text, lang: langPrefix })
-        });
-        if (response.status === 204 || !response.ok) throw new Error("Cloud TTS unavailable");
-        const blob = await response.blob();
-        if (blob.size < 100) throw new Error("Audio file is empty");
-
-        const audioUrl = URL.createObjectURL(blob);
-        audioPlayer.src = audioUrl;
-        audioPlayer.onplay = () => { isSpeaking = true; setAuraState('speaking'); updateBubble("Speaking..."); };
-        audioPlayer.onended = () => { isSpeaking = false; setAuraState('idle'); };
-        await audioPlayer.play().catch(e => useFallbackVoice(text, langPrefix));
-    } catch (error) {
-        console.error("Cloud Voice Error. Falling back:", error.message);
-        useFallbackVoice(text, langPrefix);
-    }
-}
-
-function useFallbackVoice(text, langPrefix) {
-    if (!window.speechSynthesis) { updateBubble("Voice Error"); setAuraState('idle'); return; }
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = langPrefix === 'en' ? 'en-US' : langPrefix;
-    const voices = window.speechSynthesis.getVoices();
-    const matchedVoice = voices.find(v => v.lang.startsWith(langPrefix));
-    if (matchedVoice) utterance.voice = matchedVoice;
-    utterance.onstart = () => { isSpeaking = true; setAuraState('speaking'); updateBubble("Speaking..."); };
-    utterance.onend = () => { isSpeaking = false; setAuraState('idle'); };
-    window.speechSynthesis.speak(utterance);
-}
-
-// --- SEND TO MULTI-AI BACKEND ---
-async function sendToAI(text) {
-    isProcessing = true;
-    setAuraState('processing');
-    updateBubble("Consulting AIs...");
-    
-    try {
-        const response = await fetch('https://aura-assistant-34ri.onrender.com/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: text, userId: CURRENT_USER_ID })
-        });
-        if (!response.ok) throw new Error(`Backend error: ${response.status}`);
-        const data = await response.json();
-        let aiReply = data.reply || "I'm sorry, I didn't get that.";
-        
-        // ACTION PARSER (Open Apps / Call)
-        if (aiReply.includes("ACTION: URL:")) {
-            const urlMatch = aiReply.match(/ACTION:\s*URL:\s*([^\s]+)/i);
-            if (urlMatch && urlMatch[1]) {
-                const actionUrl = urlMatch[1].trim();
+        // WAKE WORD DETECTION
+        if (wakeModeEnabled) {
+            // Check if the user said "aura"
+            if (transcript.includes('aura')) {
+                // Extract the command after the word "aura"
+                let command = transcript.split('aura')[1].trim();
                 
-                let friendlyMsg = "Opening the requested application...";
-                if (actionUrl.startsWith("tel:")) friendlyMsg = "Opening your phone dialer...";
-                if (actionUrl.startsWith("sms:")) friendlyMsg = "Opening your messaging app...";
-                if (actionUrl.includes("youtube.com")) friendlyMsg = "Opening YouTube...";
-                if (actionUrl.includes("whatsapp.com")) friendlyMsg = "Opening WhatsApp...";
-                
-                addMessageToUI('assistant', friendlyMsg);
-                await speakResponse(friendlyMsg);
-                
-                setTimeout(() => { window.open(actionUrl, '_blank'); }, 1000);
-                isProcessing = false;
-                return;
+                if (command.length > 0) {
+                    // User said "AURA, what is the weather"
+                    recognition.stop(); // Stop listening to process command
+                    addMessageToUI('user', command);
+                    sendToAI(command);
+                } else {
+                    // User just said "AURA"
+                    recognition.stop();
+                    setAuraState('listening');
+                    updateBubble("Yes? I'm listening...");
+                    
+                    // Restart recognition to catch the actual command
+                    setTimeout(() => {
+                        if (wakeModeEnabled && !isProcessing) recognition.start();
+                    }, 500);
+                }
+            }
+        } else {
+            // NORMAL TAP-TO-SPEAK MODE
+            if (event.results[event.results.length - 1].isFinal) {
+                addMessageToUI('user', transcript);
+                sendToAI(transcript);
             }
         }
-        
-        addMessageToUI('assistant', aiReply);
-        isProcessing = false;
-        await speakResponse(aiReply);
-        
-    } catch (error) {
-        console.error("Error fetching AI:", error);
-        addMessageToUI('assistant', "Connection lost. Please try again.");
-        updateBubble("Error");
-        setAuraState('idle');
-        isProcessing = false;
-    }
-}
-
-// --- SPEECH RECOGNITION HANDLERS ---
-if (recognition) {
-    recognition.onstart = () => { isListening = true; setAuraState('listening'); updateBubble("Listening..."); };
-    recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        addMessageToUI('user', transcript);
-        sendToAI(transcript);
     };
-    recognition.onerror = (event) => { updateBubble("Mic Error"); setAuraState('idle'); };
-    recognition.onend = () => { isListening = false; if (!isProcessing && !isSpeaking) setAuraState('idle'); };
+
+    recognition.onerror = (event) => {
+        console.error("Recognition error:", event.error);
+        if (!wakeModeEnabled) {
+            updateBubble("Mic Error");
+            setAuraState('idle');
+        }
+    };
+
+    recognition.onend = () => {
+        isListening = false;
+        
+        // If Hands-Free mode is on, automatically restart listening
+        if (wakeModeEnabled && !isProcessing && !isSpeaking) {
+            try {
+                recognition.start();
+            } catch (e) {
+                console.log("Restarting recognition...");
+            }
+        } else if (!isProcessing && !isSpeaking) {
+            setAuraState('idle');
+        }
+    };
 }
 
-// --- AURA ROBOT CLICK EVENT ---
+// Update the AURA ROBOT CLICK EVENT to handle Hands-Free mode
 auraRobot.addEventListener('click', () => {
     if (!CURRENT_USER_ID) return alert("Please login first.");
+    
+    // If hands-free is on, tapping the orb turns it off
+    if (wakeModeEnabled) {
+        document.getElementById('wakeModeToggle').checked = false;
+        document.getElementById('wakeModeToggle').dispatchEvent(new Event('change'));
+        return;
+    }
+
     if (isListening || isProcessing || isSpeaking) {
         if (isListening) recognition.stop();
         if (isSpeaking) { audioPlayer.pause(); if (window.speechSynthesis) window.speechSynthesis.cancel(); }
         setAuraState('idle');
         return;
     }
+    
     if (recognition) recognition.start();
 });
 
-setAuraState('idle');
+
