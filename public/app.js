@@ -18,6 +18,7 @@ let audioPlayer = new Audio();
 let wakeWordActive = false;
 let wakeRecognition = null;
 let commandRecognition = null;
+let wakeWordRetryCount = 0;
 
 // ==========================================
 // 🗺️ APP LAUNCHER MAP
@@ -79,23 +80,24 @@ const APP_URLS = {
 };
 
 // ==========================================
-// 🎵 PLAY SONG — Smart detection
+// 🎵 PLAY SONG — Smart detection (IMPROVED)
 // ==========================================
 function handlePlaySong(transcript) {
-  // Patterns: "play <song>", "play <song> on spotify/youtube"
   const lower = transcript.toLowerCase();
 
   let platform = 'youtube'; // default
   let songQuery = '';
 
   // Detect platform override
-  if (lower.includes(' on spotify') || lower.includes(' in spotify')) {
+  if (lower.includes(' on spotify') || lower.includes(' in spotify') || lower.includes('spotify')) {
     platform = 'spotify';
   } else if (lower.includes(' on jiosaavn') || lower.includes(' in jiosaavn')) {
     platform = 'jiosaavn';
   } else if (lower.includes(' on gaana') || lower.includes(' in gaana')) {
     platform = 'gaana';
   } else if (lower.includes(' on youtube music') || lower.includes(' in youtube music')) {
+    platform = 'youtube_music';
+  } else if (lower.includes('youtube music')) {
     platform = 'youtube_music';
   }
 
@@ -104,10 +106,18 @@ function handlePlaySong(transcript) {
     .replace(/play\s+/i, '')
     .replace(/\s+on\s+(spotify|youtube|jiosaavn|gaana|youtube music)/i, '')
     .replace(/\s+in\s+(spotify|youtube|jiosaavn|gaana|youtube music)/i, '')
+    .replace(/\s+(on|in)\s+/i, ' ')
     .replace(/\s+song\s*/i, ' ')
     .trim();
 
   songQuery = cleaned;
+
+  if (!songQuery || songQuery.length < 2) {
+    const msg = "Please tell me what song you want to play! 🎵";
+    addMessageToUI('assistant', msg);
+    speakResponse(msg);
+    return true;
+  }
 
   let url = '';
   let platformName = '';
@@ -130,26 +140,42 @@ function handlePlaySong(transcript) {
     platformName = 'YouTube';
   }
 
-  const msg = `Playing "${songQuery}" on ${platformName}! 🎵`;
+  const msg = `🎵 Playing "${songQuery}" on ${platformName}!`;
   addMessageToUI('assistant', msg);
   speakResponse(msg);
-  setTimeout(() => window.open(url, '_blank'), 1200);
+  setTimeout(() => {
+    const newWindow = window.open(url, '_blank');
+    if (!newWindow) {
+      console.warn("Popup blocked, trying alternate method");
+      window.location.href = url;
+    }
+  }, 1200);
   return true;
 }
 
 // ==========================================
-// 📱 OPEN APP — Smart detection
+// 📱 OPEN APP — Smart detection (IMPROVED)
 // ==========================================
 function handleOpenApp(transcript) {
-  const lower = transcript.toLowerCase();
+  const lower = transcript.toLowerCase().trim();
 
-  // Direct app name match
-  for (const [appName, url] of Object.entries(APP_URLS)) {
-    if (lower.includes(appName)) {
-      const msg = `Opening ${appName.charAt(0).toUpperCase() + appName.slice(1)}! 🚀`;
+  // Sort by longest key first to avoid partial matches
+  const sortedApps = Object.entries(APP_URLS).sort((a, b) => b[0].length - a[0].length);
+
+  for (const [appName, url] of sortedApps) {
+    const appPattern = new RegExp(`\\b${appName}\\b`, 'i');
+    if (appPattern.test(lower)) {
+      const displayName = appName.charAt(0).toUpperCase() + appName.slice(1);
+      const msg = `🚀 Opening ${displayName}!`;
       addMessageToUI('assistant', msg);
       speakResponse(msg);
-      setTimeout(() => window.open(url, '_blank'), 1000);
+      setTimeout(() => {
+        const newWindow = window.open(url, '_blank');
+        if (!newWindow) {
+          console.warn("Popup blocked, trying alternate method");
+          window.location.href = url;
+        }
+      }, 1000);
       return true;
     }
   }
@@ -160,92 +186,163 @@ function handleOpenApp(transcript) {
 // 🔍 LOCAL COMMAND HANDLER — runs before sending to AI
 // ==========================================
 function handleLocalCommands(transcript) {
+  if (!transcript || transcript.trim().length === 0) return false;
+
   const lower = transcript.toLowerCase().trim();
 
-  // 1. Play song command
-  const playPatterns = [/^play\s+.+/i, /^play\s+.+\s+song/i];
+  console.log(`📝 Processing command: "${lower}"`);
+
+  // 1. Play song command (IMPROVED PATTERNS)
+  const playPatterns = [
+    /^play\s+.+/i,
+    /^play\s+.+\s+song/i,
+    /play\s+(?:me\s+)?(.+)(?:\s+song)?/i
+  ];
   if (playPatterns.some(p => p.test(lower))) {
+    console.log("✅ Matched PLAY pattern");
     return handlePlaySong(transcript);
   }
 
-  // 2. Open / launch app command
+  // 2. Open / launch app command (IMPROVED PATTERNS)
   const openPatterns = [
-    /^open\s+/i, /^launch\s+/i, /^start\s+/i,
-    /^go to\s+/i, /^take me to\s+/i, /^switch to\s+/i
+    /^open\s+/i,
+    /^launch\s+/i,
+    /^start\s+/i,
+    /^go to\s+/i,
+    /^take me to\s+/i,
+    /^switch to\s+/i,
+    /^show me\s+/i
   ];
   if (openPatterns.some(p => p.test(lower))) {
+    console.log("✅ Matched OPEN pattern");
     const handled = handleOpenApp(lower);
     if (handled) return true;
   }
 
   // 3. Direct app name (without open keyword)
-  // e.g. "YouTube", "Spotify"
   for (const appName of Object.keys(APP_URLS)) {
-    if (lower === appName || lower === `open ${appName}`) {
-      const handled = handleOpenApp(lower.includes(appName) ? lower : appName);
-      if (handled) return true;
+    const exactPattern = new RegExp(`^${appName}$`, 'i');
+    if (exactPattern.test(lower)) {
+      console.log(`✅ Matched app name: ${appName}`);
+      return handleOpenApp(appName);
     }
   }
 
+  console.log("❌ No local command matched, sending to AI");
   return false; // Not handled locally, send to AI
 }
 
 // ==========================================
-// 🎙️ WAKE WORD ENGINE — "Aura" trigger
+// 🎙️ WAKE WORD ENGINE — "Aura" trigger (IMPROVED)
 // ==========================================
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
 function setupWakeWordListener() {
-  if (!SpeechRecognition) return;
+  if (!SpeechRecognition) {
+    console.error("❌ Speech Recognition API not supported in this browser");
+    return;
+  }
+
+  console.log("🔔 Setting up wake word listener...");
 
   wakeRecognition = new SpeechRecognition();
   wakeRecognition.continuous = true;
   wakeRecognition.interimResults = true;
   wakeRecognition.lang = 'en-IN';
 
+  wakeRecognition.onstart = () => {
+    console.log("🎙️ Wake word listener started");
+    wakeWordRetryCount = 0;
+  };
+
   wakeRecognition.onresult = (event) => {
+    let interimTranscript = '';
+    let finalTranscript = '';
+
     for (let i = event.resultIndex; i < event.results.length; i++) {
       const transcript = event.results[i][0].transcript.toLowerCase().trim();
-      // Check for wake word "aura"
-      if (transcript.includes('aura') || transcript.includes('ora') || transcript.includes('awra')) {
-        if (!isListening && !isProcessing && !isSpeaking && CURRENT_USER_ID) {
-          console.log('🔔 Wake word detected!');
+
+      if (event.results[i].isFinal) {
+        finalTranscript += transcript + ' ';
+      } else {
+        interimTranscript += transcript;
+      }
+    }
+
+    const allText = (finalTranscript + interimTranscript).toLowerCase();
+    console.log(`🎙️ Wake word interim: "${allText}"`);
+
+    // Check for wake word "aura" with flexible matching
+    const wakeWordPatterns = [
+      /\baura\b/i,
+      /\bawra\b/i,
+      /\bora\b/i,
+      /^aura/i,
+      /aura$/i
+    ];
+
+    const wakeWordDetected = wakeWordPatterns.some(pattern => pattern.test(allText));
+
+    if (wakeWordDetected) {
+      if (!isListening && !isProcessing && !isSpeaking && CURRENT_USER_ID) {
+        console.log('✅ Wake word "AURA" DETECTED! Starting command listening...');
+        try {
           wakeRecognition.stop();
-          triggerCommandListening();
-          break;
-        }
+        } catch(e) {}
+        triggerCommandListening();
       }
     }
   };
 
   wakeRecognition.onend = () => {
+    console.log("🔴 Wake word listener ended");
     // Restart wake word listener unless we're in a command session
-    if (!isListening && !isProcessing && !isSpeaking && CURRENT_USER_ID) {
+    if (!isListening && !isProcessing && !isSpeaking && CURRENT_USER_ID && wakeWordActive) {
+      console.log("🔄 Restarting wake word listener...");
       setTimeout(() => {
-        try { wakeRecognition.start(); } catch(e) {}
+        try { 
+          wakeRecognition.start(); 
+          wakeWordRetryCount = 0;
+        } catch(e) {
+          console.error("Failed to restart wake word:", e.message);
+          if (wakeWordRetryCount < 3) {
+            wakeWordRetryCount++;
+            setTimeout(setupWakeWordListener, 2000);
+          }
+        }
       }, 500);
     }
   };
 
   wakeRecognition.onerror = (e) => {
-    if (e.error !== 'no-speech') {
+    console.error("🔴 Wake word error:", e.error);
+    if (e.error !== 'no-speech' && e.error !== 'network') {
       setTimeout(() => {
-        if (!isListening && CURRENT_USER_ID) {
-          try { wakeRecognition.start(); } catch(err) {}
+        if (!isListening && CURRENT_USER_ID && wakeWordActive) {
+          try { 
+            wakeRecognition.start(); 
+          } catch(err) {
+            console.error("Error restarting:", err);
+          }
         }
-      }, 1000);
+      }, 2000);
     }
   };
 
-  try { wakeRecognition.start(); wakeWordActive = true; } catch(e) {}
+  try { 
+    wakeRecognition.start(); 
+    wakeWordActive = true;
+    console.log("✅ Wake word listener activated");
+  } catch(e) {
+    console.error("Failed to start wake word listener:", e.message);
+  }
 }
 
 function triggerCommandListening() {
+  console.log("🎤 Triggering command listening...");
   showWakeWordIndicator(true);
-  updateBubble("I'm listening... 👂");
+  updateBubble("Listening for your command... 👂");
   speechBubble.classList.add('active');
-
-  // Brief beep/visual feedback
   auraRobot.classList.add('listening');
 
   commandRecognition = new SpeechRecognition();
@@ -257,20 +354,24 @@ function triggerCommandListening() {
     isListening = true;
     setAuraState('listening');
     updateBubble("Listening... 👂");
+    console.log("🎤 Command listening started");
   };
 
   commandRecognition.onresult = (event) => {
     const transcript = event.results[0][0].transcript;
+    console.log(`📝 Command transcript: "${transcript}"`);
     addMessageToUI('user', transcript);
     isListening = false;
 
     const handled = handleLocalCommands(transcript);
     if (!handled) {
+      console.log("📤 Sending to AI backend...");
       sendToAI(transcript);
     }
   };
 
   commandRecognition.onerror = (e) => {
+    console.error("Command recognition error:", e.error);
     updateBubble("Didn't catch that. Say 'Aura' again.");
     setAuraState('idle');
     isListening = false;
@@ -278,6 +379,7 @@ function triggerCommandListening() {
   };
 
   commandRecognition.onend = () => {
+    console.log("🔴 Command listening ended");
     isListening = false;
     showWakeWordIndicator(false);
     if (!isProcessing && !isSpeaking) {
@@ -286,14 +388,25 @@ function triggerCommandListening() {
     }
   };
 
-  try { commandRecognition.start(); } catch(e) {}
+  try { 
+    commandRecognition.start(); 
+  } catch(e) {
+    console.error("Failed to start command listening:", e.message);
+  }
 }
 
 function restartWakeWord() {
+  console.log("🔄 Restarting wake word listening...");
   showWakeWordIndicator(false);
   if (CURRENT_USER_ID && wakeWordActive) {
     setTimeout(() => {
-      try { wakeRecognition.start(); } catch(e) {}
+      try { 
+        if (wakeRecognition) wakeRecognition.start();
+      } catch(e) {
+        console.error("Error restarting wake word:", e.message);
+        // Fallback: recreate the listener
+        setTimeout(setupWakeWordListener, 1000);
+      }
     }, 800);
   }
 }
@@ -323,7 +436,7 @@ function updateTime() {
 }
 async function loadWeather() {
     try {
-        const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=28.6139&longitude=77.2090&current_weather=true');
+        const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=12.9716&longitude=79.1573&current_weather=true');
         const data = await res.json();
         document.getElementById('weather-temp').textContent = `${Math.round(data.current_weather.temperature)}°`;
         let desc = "Clear";
@@ -362,14 +475,19 @@ window.firebaseAuth.onAuthStateChanged(window.firebaseAuth.auth, (user) => {
         CURRENT_USER_ID = user.uid;
         authScreen.style.display = 'none';
         appContainer.style.display = 'flex';
-        // Start wake word listener after login
-        setTimeout(() => setupWakeWordListener(), 1000);
+        console.log(`✅ User logged in: ${user.email}`);
+        // Start wake word listener after login with better delay
+        setTimeout(() => {
+            console.log("Starting wake word listener after login...");
+            setupWakeWordListener();
+        }, 1500);
     } else {
         CURRENT_USER_ID = null;
         wakeWordActive = false;
         try { wakeRecognition && wakeRecognition.stop(); } catch(e) {}
         authScreen.style.display = 'flex';
         appContainer.style.display = 'none';
+        console.log("User logged out");
     }
 });
 
@@ -428,6 +546,7 @@ async function loadHistory() {
             sessionHistory.appendChild(groupDiv);
         }
     } catch (error) {
+        console.error("History load error:", error);
         sessionHistory.innerHTML = '<div class="empty-state small"><p>Error loading history.</p></div>';
     }
 }
@@ -539,9 +658,11 @@ async function sendToAI(text) {
         const data = await response.json();
         let aiReply = data.reply || "I'm sorry, I didn't get that.";
         
+        console.log(`📤 AI Reply received (${aiReply.length} chars)`);
+        
         // ACTION PARSER (Open Apps / Call)
         if (aiReply.includes("ACTION: URL:")) {
-            const urlMatch = aiReply.match(/ACTION:\s*URL:\s*([^\s]+)/i);
+            const urlMatch = aiReply.match(/ACTION:\s*URL:\s*([^\s\n]+)/i);
             if (urlMatch && urlMatch[1]) {
                 const actionUrl = urlMatch[1].trim();
                 
@@ -550,10 +671,16 @@ async function sendToAI(text) {
                 if (actionUrl.startsWith("sms:")) friendlyMsg = "Opening your messaging app...";
                 if (actionUrl.includes("youtube.com")) friendlyMsg = "Opening YouTube...";
                 if (actionUrl.includes("whatsapp.com")) friendlyMsg = "Opening WhatsApp...";
+                if (actionUrl.includes("spotify.com")) friendlyMsg = "Opening Spotify...";
                 
                 addMessageToUI('assistant', friendlyMsg);
                 await speakResponse(friendlyMsg);
-                setTimeout(() => { window.open(actionUrl, '_blank'); }, 1000);
+                setTimeout(() => { 
+                  const newWindow = window.open(actionUrl, '_blank');
+                  if (!newWindow) {
+                    window.location.href = actionUrl;
+                  }
+                }, 1000);
                 isProcessing = false;
                 return;
             }
@@ -593,8 +720,11 @@ auraRobot.addEventListener('click', () => {
     }
 
     // Manual tap triggers command listening directly
+    console.log("📱 Tap detected - starting command listening...");
     try { wakeRecognition && wakeRecognition.stop(); } catch(e) {}
     triggerCommandListening();
 });
 
+// Initial state
 setAuraState('idle');
+console.log("✅ AURA Voice Agent initialized");
