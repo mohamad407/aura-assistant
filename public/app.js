@@ -69,7 +69,7 @@ const recognition = SpeechRecognition ? new SpeechRecognition() : null;
 if (recognition) {
     recognition.continuous = false;
     recognition.interimResults = false;
-    recognition.lang = 'en-US';
+    recognition.lang = 'en-IN'; // Set to Indian English to better understand diverse accents
 } else {
     alert("Your browser doesn't support Speech Recognition. Please use Chrome or Edge.");
 }
@@ -80,7 +80,7 @@ if (recognition) {
 async function loadHistory() {
     if (!CURRENT_USER_ID) return;
     try {
-        // ✅ FIXED: Using your live Render backend URL
+        // Live Render backend URL
         const response = await fetch(`https://aura-assistant-34ri.onrender.com/history/${CURRENT_USER_ID}`);
         const history = await response.json();
         
@@ -118,14 +118,54 @@ function updateBubble(text) {
 }
 
 
-// --- VOICE OUTPUT (Text-to-Speech) ---
+// --- VOICE OUTPUT (Multi-Language Text-to-Speech) ---
+
+// Detects multiple languages based on Unicode characters
+function detectLanguage(text) {
+    if (/[\u0B80-\u0BFF]/.test(text)) return 'ta-IN'; // Tamil
+    if (/[\u0900-\u097F]/.test(text)) return 'hi-IN'; // Hindi
+    if (/[\u0980-\u09FF]/.test(text)) return 'bn-IN'; // Bengali
+    if (/[\u0D00-\u0D7F]/.test(text)) return 'ml-IN'; // Malayalam
+    if (/[\u0C00-\u0C7F]/.test(text)) return 'te-IN'; // Telugu
+    if (/[\u0600-\u06FF]/.test(text)) return 'ar-SA'; // Arabic
+    if (/[\u4E00-\u9FFF]/.test(text)) return 'zh-CN'; // Chinese
+    if (/[\u3040-\u30FF]/.test(text)) return 'ja-JP'; // Japanese
+    if (/[\uAC00-\uD7AF]/.test(text)) return 'ko-KR'; // Korean
+    if (/[\u0400-\u04FF]/.test(text)) return 'ru-RU'; // Russian
+    if (/[àâäçéèêëîïôöùûü]/i.test(text)) return 'fr-FR'; // French (basic detection)
+    if (/[ñ¿¡]/i.test(text)) return 'es-ES'; // Spanish (basic detection)
+    // Add more if needed, otherwise default to English
+    return 'en-US'; 
+}
 
 function speakResponse(text) {
     if (!window.speechSynthesis) return;
     
     window.speechSynthesis.cancel(); // Stop any ongoing speech
+    
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-US';
+    
+    // 1. Detect the language
+    const lang = detectLanguage(text);
+    utterance.lang = lang;
+    
+    // 2. Find a matching voice on the user's device
+    const voices = window.speechSynthesis.getVoices();
+    
+    // Try to find an exact match (e.g., ta-IN)
+    let matchedVoice = voices.find(voice => voice.lang === lang);
+    
+    // If no exact match, try to find a partial match (e.g., 'ta' instead of 'ta-IN')
+    if (!matchedVoice) {
+        matchedVoice = voices.find(voice => voice.lang.startsWith(lang.substring(0, 2)));
+    }
+    
+    if (matchedVoice) {
+        utterance.voice = matchedVoice;
+        console.log("Speaking in:", lang, matchedVoice.name);
+    } else {
+        console.log("No voice found for", lang, ". Using default browser voice.");
+    }
     
     utterance.onstart = () => {
         isSpeaking = true;
@@ -141,6 +181,13 @@ function speakResponse(text) {
     window.speechSynthesis.speak(utterance);
 }
 
+// Load voices early (Some browsers need this event to populate voices)
+if (window.speechSynthesis) {
+    window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.getVoices();
+    };
+}
+
 
 // --- SEND TO MULTI-AI BACKEND ---
 
@@ -149,7 +196,7 @@ async function sendToAI(text) {
     updateBubble("⚙️ Consulting 15+ AIs..."); // Multi-AI Consensus UI update
     
     try {
-        // ✅ FIXED: Using your live Render backend URL
+        // Live Render backend URL
         const response = await fetch('https://aura-assistant-34ri.onrender.com/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
