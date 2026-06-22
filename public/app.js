@@ -429,16 +429,22 @@ conversationTimer = setTimeout(() => {
         restartWakeWord();
     }
 };
-
-  commandRecognition.onend = () => {
+commandRecognition.onend = () => {
     console.log("🔴 Command listening ended");
+
     isListening = false;
     showWakeWordIndicator(false);
-    if (!isProcessing && !isSpeaking) {
-      setAuraState('idle');
-      restartWakeWord();
+
+    if (conversationMode) {
+        setTimeout(() => {
+            if (!isSpeaking && !isProcessing) {
+                triggerCommandListening();
+            }
+        }, 500);
+    } else {
+        restartWakeWord();
     }
-  };
+};
 
   try { 
     commandRecognition.start(); 
