@@ -3,63 +3,82 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AURA - Voice AI Assistant</title>
+    <title>AURA - Neural Voice AI</title>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
 </head>
 <body>
     
+    <!-- AI NETWORK BACKGROUND -->
+    <div class="ai-bg">
+        <div class="grid-overlay"></div>
+        <div class="scan-line"></div>
+    </div>
+
     <!-- LOGIN SCREEN -->
     <div id="auth-screen" class="auth-container">
         <div class="auth-card">
-            <h1>AURA</h1>
-            <p>Sign in to save your chat history</p>
+            <div class="ai-core">
+                <div class="core-ring"></div>
+                <div class="core-ring"></div>
+                <div class="core-center"></div>
+            </div>
+            <h1 class="glitch" data-text="AURA">AURA</h1>
+            <p class="subtitle">NEURAL VOICE ASSISTANT</p>
             
-            <input type="email" id="email-input" placeholder="Email" class="auth-input">
-            <input type="password" id="password-input" placeholder="Password" class="auth-input">
+            <div class="input-group">
+                <input type="email" id="email-input" placeholder="Email Address" class="auth-input" required>
+                <input type="password" id="password-input" placeholder="Password" class="auth-input" required>
+            </div>
             
-            <button id="signup-btn" class="auth-btn">Sign Up / Login</button>
+            <button id="signup-btn" class="auth-btn">INITIALIZE / LOGIN</button>
             
-            <div class="divider">OR</div>
+            <div class="divider">OR AUTHENTICATE WITH</div>
             
             <button id="google-btn" class="google-btn">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/2048px-Google_%22G%22_logo.svg.png" width="20" alt="G">
-                Continue with Google
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/2048px-Google_%22G%22_logo.svg.png" width="18" alt="G">
+                Google Network
             </button>
         </div>
     </div>
 
-    <!-- MAIN APP (Hidden until login) -->
+    <!-- MAIN DASHBOARD (Hidden until login) -->
     <div id="app-container" class="app-container" style="display: none;">
-        <header>
-            <div>
-                <h1>AURA</h1>
-                <p>Your Voice AI Assistant</p>
+        <header class="dash-header">
+            <div class="header-left">
+                <div class="status-dot"></div>
+                <span class="header-title">AURA OS</span>
             </div>
-            <button id="logout-btn" class="logout-btn">Logout</button>
+            <button id="logout-btn" class="logout-btn">DISCONNECT</button>
         </header>
 
-        <main class="history-container" id="historyContainer"></main>
+        <main class="chat-history-section" id="historyContainer">
+            <!-- Chat history will be injected here via JS -->
+            <div class="empty-state">
+                <div class="empty-robot">🤖</div>
+                <p>NEURAL CORE ONLINE</p>
+                <span>Tap the orb below to communicate</span>
+            </div>
+        </main>
 
+        <!-- AURA Floating Assistant Orb -->
         <div class="aura-container" id="auraContainer">
             <div class="speech-bubble" id="speechBubble">
-                <span id="bubbleText">Tap me to start!</span>
+                <span id="bubbleText">Tap to start</span>
             </div>
             <div class="aura-robot" id="auraRobot">
-                <div class="robot-emoji">🤖</div>
+                <div class="orb-ring"></div>
+                <div class="orb-ring"></div>
+                <div class="orb-core">🤖</div>
             </div>
         </div>
     </div>
 
-    <!-- Firebase SDK (v12 Modular) -->
+    <!-- Firebase SDK (v10 Modular) -->
     <script type="module">
-        // Import the functions you need from the SDKs you need
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
-        
-        // IMPORT AUTH INSTEAD OF ANALYTICS
         import { getAuth, GoogleAuthProvider, signInWithPopup, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 
-        // Your web app's Firebase configuration
         const firebaseConfig = {
             apiKey: "AIzaSyCGJ-UxLAuQVKp0Up8WFUHmcIykai3F41o",
             authDomain: "aura-assistant-9468e.firebaseapp.com",
@@ -70,20 +89,15 @@
             measurementId: "G-Y1BLMDRB2K"
         };
 
-        // Initialize Firebase
         const app = initializeApp(firebaseConfig);
-        
-        // INITIALIZE AUTH AND PROVIDER (This was missing!)
         const auth = getAuth(app);
         const provider = new GoogleAuthProvider();
 
-        // Expose to global scope so app.js can use it
         window.firebaseAuth = {
             auth, provider, signInWithPopup, createUserWithEmailAndPassword, 
             signInWithEmailAndPassword, signOut, onAuthStateChanged
         };
         
-        // Load main script after firebase is ready
         const script = document.createElement('script');
         script.src = 'app.js';
         document.body.appendChild(script);
