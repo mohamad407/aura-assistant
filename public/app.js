@@ -189,6 +189,27 @@ function handleLocalCommands(transcript) {
   if (!transcript || transcript.trim().length === 0) return false;
 
   const lower = transcript.toLowerCase().trim();
+  // Greetings
+if (
+    lower === "hi" ||
+    lower === "hello" ||
+    lower === "hey"
+) {
+    const msg = "Hello! How are you today?";
+    addMessageToUI('assistant', msg);
+    speakResponse(msg);
+    return true;
+}
+
+// How are you
+if (
+    lower.includes("how are you")
+) {
+    const msg = "I'm doing great. How can I help you?";
+    addMessageToUI('assistant', msg);
+    speakResponse(msg);
+    return true;
+}
 
   console.log(`📝 Processing command: "${lower}"`);
 
