@@ -312,6 +312,21 @@ function setupWakeWordListener() {
         try {
           wakeRecognition.stop();
         } catch(e) {}
+        if (wakeWordDetected) {
+    if (!isListening && !isProcessing && !isSpeaking && CURRENT_USER_ID) {
+        console.log('Wake word detected');
+
+        try {
+            wakeRecognition.stop();
+        } catch(e) {}
+
+        speakResponse("Yes?");
+
+        setTimeout(() => {
+            triggerCommandListening();
+        }, 1000);
+    }
+}
         triggerCommandListening();
       }
     }
