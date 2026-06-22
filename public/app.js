@@ -13,10 +13,14 @@ let isSpeaking = false;
 let CURRENT_USER_ID = null;
 
 // --- FIREBASE AUTH EVENTS ---
+
+// Handle Email/Password Sign Up or Login
 document.getElementById('signup-btn').addEventListener('click', () => {
     const email = document.getElementById('email-input').value;
     const password = document.getElementById('password-input').value;
     
+    if (!email || !password) return alert("Please enter email and password");
+
     // Try to sign in. If user doesn't exist, sign them up.
     window.firebaseAuth.signInWithEmailAndPassword(window.firebaseAuth.auth, email, password)
         .catch((error) => {
@@ -29,23 +33,25 @@ document.getElementById('signup-btn').addEventListener('click', () => {
         });
 });
 
+// Handle Google Login
 document.getElementById('google-btn').addEventListener('click', () => {
     window.firebaseAuth.signInWithPopup(window.firebaseAuth.auth, window.firebaseAuth.provider)
         .catch(err => alert(err.message));
 });
 
+// Handle Logout
 document.getElementById('logout-btn').addEventListener('click', () => {
     window.firebaseAuth.signOut(window.firebaseAuth.auth);
 });
 
-// Auth State Observer (Triggers when login/logout happens)
+// Auth State Observer (Triggers automatically when user logs in or out)
 window.firebaseAuth.onAuthStateChanged(window.firebaseAuth.auth, (user) => {
     if (user) {
         // User is logged in!
-        CURRENT_USER_ID = user.uid;
+        CURRENT_USER_ID = user.uid; // Use Firebase UID for MongoDB
         authScreen.style.display = 'none';
         appContainer.style.display = 'flex';
-        loadHistory(); // Load MongoDB history for this Firebase UID
+        loadHistory(); // Fetch this user's chat history from MongoDB
     } else {
         // User is logged out!
         CURRENT_USER_ID = null;
@@ -55,16 +61,22 @@ window.firebaseAuth.onAuthStateChanged(window.firebaseAuth.auth, (user) => {
     }
 });
 
-// Speech API Initialization
+
+// --- SPEECH RECOGNITION SETUP ---
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const recognition = SpeechRecognition ? new SpeechRecognition() : null;
+
 if (recognition) {
     recognition.continuous = false;
     recognition.interimResults = false;
     recognition.lang = 'en-US';
+} else {
+    alert("Your browser doesn't support Speech Recognition. Please use Chrome or Edge.");
 }
 
-// --- MONGODB HISTORY MANAGEMENT (via API) ---
+
+// --- MONGODB HISTORY MANAGEMENT (via Backend API) ---
+
 async function loadHistory() {
     if (!CURRENT_USER_ID) return;
     try {
@@ -88,7 +100,9 @@ function addMessageToUI(role, text, save = true) {
     historyContainer.scrollTop = historyContainer.scrollHeight;
 }
 
-// AURA State Manager
+
+// --- AURA ROBOT ANIMATIONS & STATES ---
+
 function setAuraState(state) {
     auraRobot.classList.remove('listening', 'processing', 'speaking');
     if (state === 'idle') {
@@ -99,12 +113,17 @@ function setAuraState(state) {
     }
 }
 
-function updateBubble(text) { bubbleText.textContent = text; }
+function updateBubble(text) { 
+    bubbleText.textContent = text; 
+}
 
-// Voice Output
+
+// --- VOICE OUTPUT (Text-to-Speech) ---
+
 function speakResponse(text) {
     if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
+    
+    window.speechSynthesis.cancel(); // Stop any ongoing speech
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'en-US';
     
@@ -113,19 +132,24 @@ function speakResponse(text) {
         setAuraState('speaking');
         updateBubble("🔊 Speaking...");
     };
+    
     utterance.onend = () => {
         isSpeaking = false;
         setAuraState('idle');
     };
+
     window.speechSynthesis.speak(utterance);
 }
 
-// Send to Backend (MongoDB)
+
+// --- SEND TO MULTI-AI BACKEND ---
+
 async function sendToAI(text) {
     setAuraState('processing');
-    updateBubble("⚙️ Processing...");
+    updateBubble("⚙️ Consulting 15+ AIs..."); // Multi-AI Consensus UI update
     
     try {
+        // NOTE: Change URL to your Render backend URL when deployed
         const response = await fetch('http://localhost:3000/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -137,6 +161,7 @@ async function sendToAI(text) {
         
         addMessageToUI('assistant', aiReply);
         speakResponse(aiReply);
+        
     } catch (error) {
         console.error("Error fetching AI:", error);
         updateBubble("⚠️ Connection Error");
@@ -144,43 +169,53 @@ async function sendToAI(text) {
     }
 }
 
-// Speech Recognition Handlers
+
+// --- SPEECH RECOGNITION EVENT HANDLERS ---
+
 if (recognition) {
     recognition.onstart = () => {
         isListening = true;
         setAuraState('listening');
         updateBubble("🟡 Listening...");
     };
+
     recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript;
         addMessageToUI('user', transcript);
         sendToAI(transcript);
     };
+
     recognition.onerror = (event) => {
         console.error("Recognition error:", event.error);
         updateBubble("⚠️ Mic Error");
         setAuraState('idle');
     };
+
     recognition.onend = () => {
         isListening = false;
         if (!isProcessing && !isSpeaking) setAuraState('idle');
     };
-} else {
-    alert("Your browser doesn't support Speech Recognition. Please use Chrome or Edge.");
 }
 
-// Click Event for AURA
+
+// --- AURA ROBOT CLICK EVENT ---
+
 auraRobot.addEventListener('click', () => {
     if (!CURRENT_USER_ID) return alert("Please login first.");
     
+    // If AURA is busy, force stop everything
     if (isListening || isProcessing || isSpeaking) {
         if (isListening) recognition.stop();
         if (isSpeaking) window.speechSynthesis.cancel();
         setAuraState('idle');
         return;
     }
-    if (recognition) recognition.start();
+    
+    // Start listening
+    if (recognition) {
+        recognition.start();
+    }
 });
 
-// Init default state
+// Initialize default state on load
 setAuraState('idle');
