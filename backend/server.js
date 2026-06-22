@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const mongoose = require('mongoose');
-const OpenAI = require('openai');
+const OpenAI = require('openai'); // We use the OpenAI SDK because Groq uses the same format
 require('dotenv').config();
 
 const app = express();
@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Serve frontend files (so you can run frontend & backend together if needed)
+// Serve frontend files
 app.use(express.static(path.join(__dirname, 'public')));
 
 // --- MongoDB Atlas Connection ---
@@ -31,32 +31,33 @@ const chatSchema = new mongoose.Schema({
 const Chat = mongoose.model('Chat', chatSchema);
 
 // ==========================================
-// 🧠 MULTI-AI CONSENSUS ENGINE (OpenRouter)
+// 🧠 MULTI-AI CONSENSUS ENGINE (GROQ - FREE)
 // ==========================================
 
-// Initialize OpenRouter (gives access to 100+ models with 1 API key)
-const openrouter = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPENROUTER_API_KEY,
+// Initialize Groq (gives access to multiple open-source models for FREE)
+const openai = new OpenAI({
+  baseURL: "https://api.groq.com/openai/v1",
+  apiKey: process.env.GROQ_API_KEY,
 });
 
-// 1. Define your 15+ AI Models
-// 1. Define your AI Models (USING FREE OPENROUTER MODELS)
+// 1. Define 5 different AI Models (Hosted on Groq for free)
 const aiModels = [
-    { name: "Llama-3.3-70B", model: "meta-llama/llama-3.3-70b-instruct:free" },
-    { name: "Gemini-Flash", model: "google/gemini-2.0-flash-exp:free" },
-    { name: "Mistral-7B", model: "mistralai/mistral-7b-instruct:free" }
+    { name: "Llama-3.3-70B", model: "llama-3.3-70b-versatile" },
+    { name: "Llama-3.1-8B", model: "llama-3.1-8b-instant" },
+    { name: "Mixtral-8x7B", model: "mixtral-8x7b-32768" },
+    { name: "Gemma-2-9B", model: "gemma2-9b-it" },
+    { name: "Llama-3.1-70B", model: "llama-3.1-70b-versatile" }
 ];
 
-// 2. Query all AIs in parallel and synthesize with a Judge AI
+// 2. Query all 5 AIs in parallel and synthesize with a Judge AI
 async function getConsensusAnswer(prompt) {
     try {
         console.log(`🧠 Consulting ${aiModels.length} AI models in parallel...`);
         
-        // Query all models at the exact same time for speed
+        // Query all models at the exact same time
         const promises = aiModels.map(async (ai) => {
             try {
-                const completion = await openrouter.chat.completions.create({
+                const completion = await openai.chat.completions.create({
                     model: ai.model,
                     messages: [{ role: "user", content: prompt }],
                 });
@@ -71,10 +72,8 @@ async function getConsensusAnswer(prompt) {
         
         // 3. Pass all responses to the Judge AI to synthesize the best one
         console.log("⚖️ Judge AI is synthesizing the ultimate answer...");
-        
-        // USING A FREE MODEL AS THE JUDGE
-        const judgeCompletion = await openrouter.chat.completions.create({
-            model: "meta-llama/llama-3.3-70b-instruct:free", 
+        const judgeCompletion = await openai.chat.completions.create({
+            model: "llama-3.3-70b-versatile", // Using Llama 3.3 70B as the Judge
             messages: [{
                 role: "system",
                 content: `You are the ultimate Judge AI. The user asked: "${prompt}". Here are answers from multiple AI models: ${JSON.stringify(allResponses)}. Synthesize the absolute best, most accurate single response. Combine the best points from the different models. Ignore incorrect information. Output ONLY the final perfect response to the user.`
@@ -123,7 +122,7 @@ app.post('/chat', async (req, res) => {
     // 1. Save user message to MongoDB
     await Chat.create({ userId, role: 'user', text });
 
-    // 2. Get the ultimate answer from the 15+ AI Consensus Engine
+    // 2. Get the ultimate answer from the 5 AI Consensus Engine
     const aiResponse = await getConsensusAnswer(text);
 
     // 3. Save the final synthesized AI response to MongoDB
