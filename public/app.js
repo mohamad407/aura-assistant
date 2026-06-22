@@ -21,6 +21,7 @@ let commandRecognition = null;
 let wakeWordRetryCount = 0;
 let conversationMode = false;
 let conversationTimer = null;
+let recognitionActive = false;
 
 // ==========================================
 // 🗺️ APP LAUNCHER MAP
@@ -377,22 +378,23 @@ function setupWakeWordListener() {
 }
 
 function triggerCommandListening() {
-  conversationMode = true;
 
-clearTimeout(conversationTimer);
+    if (recognitionActive) {
+        console.log("⚠️ Recognition already running");
+        return;
+    }
 
-conversationTimer = setTimeout(() => {
-    conversationMode = false;
-    restartWakeWord();
-}, 15000);
-  console.log("🎤 Triggering command listening...");
-  showWakeWordIndicator(true);
-  updateBubble("Listening for your command... 👂");
-  speechBubble.classList.add('active');
-  auraRobot.classList.add('listening');
+    recognitionActive = true;
+
+    console.log("🎤 Triggering command listening...");
+
+    showWakeWordIndicator(true);
+    updateBubble("Listening for your command... 👂");
+    speechBubble.classList.add('active');
+    auraRobot.classList.add('listening');
 
   commandRecognition = new SpeechRecognition();
-  commandRecognition.continuous = true;
+  commandRecognition.continuous = false;
   commandRecognition.interimResults = false;
   commandRecognition.lang = 'en-IN';
 
@@ -403,49 +405,46 @@ conversationTimer = setTimeout(() => {
     console.log("🎤 Command listening started");
   };
 
-  commandRecognition.onresult = (event) => {
+commandRecognition.onresult = (event) => {
     const transcript = event.results[0][0].transcript;
+
     console.log(`📝 Command transcript: "${transcript}"`);
+
     addMessageToUI('user', transcript);
+
     isListening = false;
+    recognitionActive = false;   // ADD THIS LINE
 
     const handled = handleLocalCommands(transcript);
-    if (!handled) {
-      console.log("📤 Sending to AI backend...");
-      sendToAI(transcript);
-    }
-  };
 
+    if (!handled) {
+        console.log("📤 Sending to AI backend...");
+        sendToAI(transcript);
+    }
+};
   commandRecognition.onerror = (e) => {
+
     console.error("Command recognition error:", e.error);
 
+    recognitionActive = false;
     isListening = false;
 
-    if (conversationMode) {
-        setTimeout(() => {
-            triggerCommandListening();
-        }, 1000);
-    } else {
-        restartWakeWord();
+    // Ignore Chrome abort errors
+    if (e.error === "aborted") {
+        return;
     }
+
+    restartWakeWord();
 };
 commandRecognition.onend = () => {
+
     console.log("🔴 Command listening ended");
 
+    recognitionActive = false;
     isListening = false;
+
     showWakeWordIndicator(false);
-
-    if (conversationMode) {
-        setTimeout(() => {
-            if (!isSpeaking && !isProcessing) {
-                triggerCommandListening();
-            }
-        }, 500);
-    } else {
-        restartWakeWord();
-    }
 };
-
   try { 
     commandRecognition.start(); 
   } catch(e) {
