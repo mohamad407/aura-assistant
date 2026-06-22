@@ -12,6 +12,9 @@ let isProcessing = false;
 let isSpeaking = false;
 let CURRENT_USER_ID = null;
 
+// Audio Player for Cloud TTS
+let audioPlayer = new Audio();
+
 // --- FIREBASE AUTH EVENTS ---
 
 // Handle Email/Password Sign Up or Login
@@ -118,80 +121,84 @@ function updateBubble(text) {
 }
 
 
-// --- VOICE OUTPUT (Multi-Language Text-to-Speech) ---
+// --- UNIVERSAL CLOUD VOICE ENGINE (ALL LANGUAGES) ---
 
-// Detects multiple languages based on Unicode characters
+// Detects ALL languages based on Unicode character ranges
 function detectLanguage(text) {
-    if (/[\u0B80-\u0BFF]/.test(text)) return 'ta-IN'; // Tamil
-    if (/[\u0900-\u097F]/.test(text)) return 'hi-IN'; // Hindi
-    if (/[\u0980-\u09FF]/.test(text)) return 'bn-IN'; // Bengali
-    if (/[\u0D00-\u0D7F]/.test(text)) return 'ml-IN'; // Malayalam
-    if (/[\u0C00-\u0C7F]/.test(text)) return 'te-IN'; // Telugu
-    if (/[\u0600-\u06FF]/.test(text)) return 'ar-SA'; // Arabic
-    if (/[\u4E00-\u9FFF]/.test(text)) return 'zh-CN'; // Chinese
-    if (/[\u3040-\u30FF]/.test(text)) return 'ja-JP'; // Japanese
-    if (/[\uAC00-\uD7AF]/.test(text)) return 'ko-KR'; // Korean
-    if (/[\u0400-\u04FF]/.test(text)) return 'ru-RU'; // Russian
-    if (/[àâäçéèêëîïôöùûü]/i.test(text)) return 'fr-FR'; // French (basic detection)
-    if (/[ñ¿¡]/i.test(text)) return 'es-ES'; // Spanish (basic detection)
-    // Add more if needed, otherwise default to English
-    return 'en-US'; 
+    if (/[\u0B80-\u0BFF]/.test(text)) return 'ta'; // Tamil
+    if (/[\u0900-\u097F]/.test(text)) return 'hi'; // Hindi
+    if (/[\u0980-\u09FF]/.test(text)) return 'bn'; // Bengali
+    if (/[\u0D00-\u0D7F]/.test(text)) return 'ml'; // Malayalam
+    if (/[\u0C00-\u0C7F]/.test(text)) return 'te'; // Telugu
+    if (/[\u0600-\u06FF]/.test(text)) return 'ar'; // Arabic
+    if (/[\u4E00-\u9FFF]/.test(text)) return 'zh'; // Chinese
+    if (/[\u3040-\u30FF]/.test(text)) return 'ja'; // Japanese
+    if (/[\uAC00-\uD7AF]/.test(text)) return 'ko'; // Korean
+    if (/[\u0400-\u04FF]/.test(text)) return 'ru'; // Russian
+    if (/[\u0370-\u03FF]/.test(text)) return 'el'; // Greek
+    if (/[\u0590-\u05FF]/.test(text)) return 'he'; // Hebrew
+    if (/[àâäçéèêëîïôöùûü]/i.test(text)) return 'fr'; // French
+    if (/[ñ¿¡]/i.test(text)) return 'es'; // Spanish
+    if (/[äöüß]/i.test(text)) return 'de'; // German
+    if (/[àèéìòù]/i.test(text)) return 'it'; // Italian
+    if (/[ãõç]/i.test(text)) return 'pt'; // Portuguese
+    return 'en'; // Default English
 }
 
-function speakResponse(text) {
-    if (!window.speechSynthesis) return;
+async function speakResponse(text) {
+    if (!text) return;
     
-    window.speechSynthesis.cancel(); // Stop any ongoing speech
+    // Stop any ongoing audio or local speech synthesis
+    audioPlayer.pause();
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
     
-    const utterance = new SpeechSynthesisUtterance(text);
+    const langPrefix = detectLanguage(text);
     
-    // 1. Detect the language
-    const lang = detectLanguage(text);
-    utterance.lang = lang;
-    
-    // 2. Find a matching voice on the user's device
-    const voices = window.speechSynthesis.getVoices();
-    
-    // Try to find an exact match (e.g., ta-IN)
-    let matchedVoice = voices.find(voice => voice.lang === lang);
-    
-    // If no exact match, try to find a partial match (e.g., 'ta' instead of 'ta-IN')
-    if (!matchedVoice) {
-        matchedVoice = voices.find(voice => voice.lang.startsWith(lang.substring(0, 2)));
-    }
-    
-    if (matchedVoice) {
-        utterance.voice = matchedVoice;
-        console.log("Speaking in:", lang, matchedVoice.name);
-    } else {
-        console.log("No voice found for", lang, ". Using default browser voice.");
-    }
-    
-    utterance.onstart = () => {
-        isSpeaking = true;
-        setAuraState('speaking');
-        updateBubble("🔊 Speaking...");
-    };
-    
-    utterance.onend = () => {
-        isSpeaking = false;
+    setAuraState('processing');
+    updateBubble("🎙️ Generating Voice...");
+
+    try {
+        // Ask backend to generate Cloud TTS audio (Microsoft Azure Neural Voices)
+        const response = await fetch('https://aura-assistant-34ri.onrender.com/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, lang: langPrefix })
+        });
+
+        if (!response.ok) throw new Error("TTS fetch failed");
+
+        // Convert response to an audio MP3 blob
+        const blob = await response.blob();
+        const audioUrl = URL.createObjectURL(blob);
+        
+        audioPlayer.src = audioUrl;
+        
+        audioPlayer.onplay = () => {
+            isSpeaking = true;
+            setAuraState('speaking');
+            updateBubble("🔊 Speaking...");
+        };
+        
+        audioPlayer.onended = () => {
+            isSpeaking = false;
+            setAuraState('idle');
+        };
+
+        // Play the high-quality cloud voice!
+        await audioPlayer.play();
+        
+    } catch (error) {
+        console.error("Voice Generation Error:", error);
+        updateBubble("⚠️ Voice Error");
         setAuraState('idle');
-    };
-
-    window.speechSynthesis.speak(utterance);
-}
-
-// Load voices early (Some browsers need this event to populate voices)
-if (window.speechSynthesis) {
-    window.speechSynthesis.onvoiceschanged = () => {
-        window.speechSynthesis.getVoices();
-    };
+    }
 }
 
 
 // --- SEND TO MULTI-AI BACKEND ---
 
 async function sendToAI(text) {
+    isProcessing = true;
     setAuraState('processing');
     updateBubble("⚙️ Consulting 15+ AIs..."); // Multi-AI Consensus UI update
     
@@ -207,12 +214,16 @@ async function sendToAI(text) {
         const aiReply = data.reply || "I'm sorry, I didn't get that.";
         
         addMessageToUI('assistant', aiReply);
-        speakResponse(aiReply);
+        isProcessing = false;
+        
+        // Trigger Cloud TTS
+        await speakResponse(aiReply);
         
     } catch (error) {
         console.error("Error fetching AI:", error);
         updateBubble("⚠️ Connection Error");
         setAuraState('idle');
+        isProcessing = false;
     }
 }
 
@@ -253,7 +264,10 @@ auraRobot.addEventListener('click', () => {
     // If AURA is busy, force stop everything
     if (isListening || isProcessing || isSpeaking) {
         if (isListening) recognition.stop();
-        if (isSpeaking) window.speechSynthesis.cancel();
+        if (isSpeaking) {
+            audioPlayer.pause();
+            if (window.speechSynthesis) window.speechSynthesis.cancel();
+        }
         setAuraState('idle');
         return;
     }
