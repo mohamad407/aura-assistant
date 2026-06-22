@@ -19,6 +19,8 @@ let wakeWordActive = false;
 let wakeRecognition = null;
 let commandRecognition = null;
 let wakeWordRetryCount = 0;
+let conversationMode = false;
+let conversationTimer = null;
 
 // ==========================================
 // 🗺️ APP LAUNCHER MAP
