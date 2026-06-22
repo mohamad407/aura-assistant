@@ -3,87 +3,82 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AURA - Neural Voice AI</title>
+    <title>AURA - AI Assistant</title>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    
-    <!-- AI NETWORK BACKGROUND -->
-    <div class="ai-bg">
-        <div class="grid-overlay"></div>
-        <div class="scan-line"></div>
-    </div>
 
     <!-- LOGIN SCREEN -->
     <div id="auth-screen" class="auth-container">
         <div class="auth-card">
-            <div class="ai-core">
-                <div class="core-ring"></div>
-                <div class="core-ring"></div>
-                <div class="core-center"></div>
+            <div class="logo-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3c0 1.31.83 2.42 2 2.83V12H8a4 4 0 0 0-4 4v1a4 4 0 0 0 4 4h8a4 4 0 0 0 4-4v-1a4 4 0 0 0-4-4h-3V7.83c1.17-.41 2-1.52 2-2.83a3 3 0 0 0-3-3z"/></svg>
             </div>
-            <h1 class="glitch" data-text="AURA">AURA</h1>
-            <p class="subtitle">NEURAL VOICE ASSISTANT</p>
+            <h1>AURA</h1>
+            <p class="subtitle">Your advanced AI assistant</p>
             
             <div class="input-group">
                 <input type="email" id="email-input" placeholder="Email Address" class="auth-input" required>
                 <input type="password" id="password-input" placeholder="Password" class="auth-input" required>
             </div>
             
-            <button id="signup-btn" class="auth-btn">INITIALIZE / LOGIN</button>
+            <button id="signup-btn" class="auth-btn">Continue</button>
             
-            <div class="divider">OR AUTHENTICATE WITH</div>
+            <div class="divider">OR</div>
             
             <button id="google-btn" class="google-btn">
                 <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/2048px-Google_%22G%22_logo.svg.png" width="18" alt="G">
-                Google Network
+                Continue with Google
             </button>
         </div>
     </div>
 
-    <!-- MAIN DASHBOARD -->
+    <!-- MAIN APP -->
     <div id="app-container" class="app-container" style="display: none;">
         <header class="dash-header">
             <div class="header-left">
-                <div class="status-dot"></div>
-                <span class="header-title">AURA OS</span>
+                <div class="weather-widget">
+                    <span id="weather-temp" class="weather-temp">--°</span>
+                    <span id="weather-desc" class="weather-desc">--</span>
+                </div>
             </div>
-            <button id="logout-btn" class="logout-btn">DISCONNECT</button>
+            <div class="header-center">
+                <div class="time-widget">
+                    <span id="live-time" class="time-val">--:--</span>
+                    <span id="live-date" class="date-val">--</span>
+                </div>
+            </div>
+            <button id="logout-btn" class="logout-btn">Logout</button>
         </header>
 
-        <!-- LIVE TIME & WEATHER WIDGET -->
-        <div class="dash-info-bar">
-            <div class="info-block">
-                <span class="info-label">SYSTEM TIME</span>
-                <span id="live-time" class="info-value">--:--:--</span>
-                <span id="live-date" class="info-sub">Loading...</span>
-            </div>
-            <div class="info-divider"></div>
-            <div class="info-block">
-                <span class="info-label">INDIA WEATHER</span>
-                <span id="weather-temp" class="info-value">--°C</span>
-                <span id="weather-desc" class="info-sub">Offline</span>
-            </div>
-        </div>
+        <!-- TABS -->
+        <nav class="tab-nav">
+            <button class="tab-btn active" data-tab="chat">Chat</button>
+            <button class="tab-btn" data-tab="history">History</button>
+        </nav>
 
-        <!-- ACTIVE CHAT SECTION -->
-        <div class="section-label">ACTIVE NEURAL LINK</div>
-        <main class="active-chat-section" id="historyContainer">
-            <div class="empty-state">
-                <div class="empty-robot">🤖</div>
-                <p>NEURAL CORE ONLINE</p>
-                <span>Tap the orb below to communicate</span>
+        <!-- CHAT VIEW -->
+        <main class="view-container" id="view-chat">
+            <div class="chat-area" id="historyContainer">
+                <div class="empty-state">
+                    <div class="empty-icon">✨</div>
+                    <h2>How can I help you today?</h2>
+                    <p>Tap the orb below to speak with AURA.</p>
+                </div>
             </div>
         </main>
 
-        <!-- HISTORY ARCHIVE SECTION -->
-        <div class="section-label">ARCHIVE LOGS</div>
-        <div class="session-history" id="sessionHistory">
-            <div class="empty-state small"><p>Loading archives...</p></div>
-        </div>
+        <!-- HISTORY VIEW -->
+        <main class="view-container" id="view-history" style="display: none;">
+            <div class="history-area" id="sessionHistory">
+                <div class="empty-state small">
+                    <p>No history yet.</p>
+                </div>
+            </div>
+        </main>
 
-        <!-- AURA Floating Assistant Orb -->
+        <!-- AURA Floating Orb -->
         <div class="aura-container" id="auraContainer">
             <div class="speech-bubble" id="speechBubble">
                 <span id="bubbleText">Tap to start</span>
@@ -91,7 +86,9 @@
             <div class="aura-robot" id="auraRobot">
                 <div class="orb-ring"></div>
                 <div class="orb-ring"></div>
-                <div class="orb-core">🤖</div>
+                <div class="orb-core">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4M12 8h.01" stroke-linecap="round"></path></svg>
+                </div>
             </div>
         </div>
     </div>
