@@ -377,7 +377,7 @@ conversationTimer = setTimeout(() => {
   auraRobot.classList.add('listening');
 
   commandRecognition = new SpeechRecognition();
-  commandRecognition.continuous = false;
+  commandRecognition.continuous = true;
   commandRecognition.interimResults = false;
   commandRecognition.lang = 'en-IN';
 
