@@ -17,75 +17,66 @@ let audioPlayer = new Audio();
 
 // --- FIREBASE AUTH EVENTS ---
 
-// Handle Email/Password Sign Up or Login
 document.getElementById('signup-btn').addEventListener('click', () => {
     const email = document.getElementById('email-input').value;
     const password = document.getElementById('password-input').value;
-    
     if (!email || !password) return alert("Please enter email and password");
-
-    // Try to sign in. If user doesn't exist, sign them up.
     window.firebaseAuth.signInWithEmailAndPassword(window.firebaseAuth.auth, email, password)
         .catch((error) => {
             if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
                 window.firebaseAuth.createUserWithEmailAndPassword(window.firebaseAuth.auth, email, password)
                     .catch(err => alert(err.message));
-            } else {
-                alert(error.message);
-            }
+            } else { alert(error.message); }
         });
 });
 
-// Handle Google Login
 document.getElementById('google-btn').addEventListener('click', () => {
     window.firebaseAuth.signInWithPopup(window.firebaseAuth.auth, window.firebaseAuth.provider)
         .catch(err => alert(err.message));
 });
 
-// Handle Logout
 document.getElementById('logout-btn').addEventListener('click', () => {
     window.firebaseAuth.signOut(window.firebaseAuth.auth);
 });
 
-// Auth State Observer (Triggers automatically when user logs in or out)
 window.firebaseAuth.onAuthStateChanged(window.firebaseAuth.auth, (user) => {
     if (user) {
-        // User is logged in!
-        CURRENT_USER_ID = user.uid; // Use Firebase UID for MongoDB
+        CURRENT_USER_ID = user.uid;
         authScreen.style.display = 'none';
         appContainer.style.display = 'flex';
-        loadHistory(); // Fetch this user's chat history from MongoDB
+        loadHistory();
     } else {
-        // User is logged out!
         CURRENT_USER_ID = null;
         authScreen.style.display = 'flex';
         appContainer.style.display = 'none';
-        historyContainer.innerHTML = ''; // Clear UI
+        historyContainer.innerHTML = '';
     }
 });
-
 
 // --- SPEECH RECOGNITION SETUP ---
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const recognition = SpeechRecognition ? new SpeechRecognition() : null;
-
 if (recognition) {
     recognition.continuous = false;
     recognition.interimResults = false;
-    recognition.lang = 'en-IN'; // Set to Indian English to better understand diverse accents
+    recognition.lang = 'en-IN'; 
 } else {
     alert("Your browser doesn't support Speech Recognition. Please use Chrome or Edge.");
 }
 
-
-// --- MONGODB HISTORY MANAGEMENT (via Backend API) ---
+// --- MONGODB HISTORY MANAGEMENT ---
 
 async function loadHistory() {
     if (!CURRENT_USER_ID) return;
     try {
-        // Live Render backend URL
         const response = await fetch(`https://aura-assistant-34ri.onrender.com/history/${CURRENT_USER_ID}`);
         const history = await response.json();
+        
+        // SAFETY CHECK: Ensure history is an array
+        if (!Array.isArray(history)) {
+            console.error("Expected array but got:", history);
+            return;
+        }
         
         historyContainer.innerHTML = '';
         history.forEach(msg => addMessageToUI(msg.role, msg.text, false));
@@ -103,9 +94,7 @@ function addMessageToUI(role, text, save = true) {
     historyContainer.scrollTop = historyContainer.scrollHeight;
 }
 
-
 // --- AURA ROBOT ANIMATIONS & STATES ---
-
 function setAuraState(state) {
     auraRobot.classList.remove('listening', 'processing', 'speaking');
     if (state === 'idle') {
@@ -116,14 +105,10 @@ function setAuraState(state) {
     }
 }
 
-function updateBubble(text) { 
-    bubbleText.textContent = text; 
-}
+function updateBubble(text) { bubbleText.textContent = text; }
 
+// --- UNIVERSAL VOICE ENGINE ---
 
-// --- UNIVERSAL CLOUD VOICE ENGINE (ALL LANGUAGES) ---
-
-// Detects ALL languages based on Unicode character ranges
 function detectLanguage(text) {
     if (/[\u0B80-\u0BFF]/.test(text)) return 'ta'; // Tamil
     if (/[\u0900-\u097F]/.test(text)) return 'hi'; // Hindi
@@ -135,20 +120,15 @@ function detectLanguage(text) {
     if (/[\u3040-\u30FF]/.test(text)) return 'ja'; // Japanese
     if (/[\uAC00-\uD7AF]/.test(text)) return 'ko'; // Korean
     if (/[\u0400-\u04FF]/.test(text)) return 'ru'; // Russian
-    if (/[\u0370-\u03FF]/.test(text)) return 'el'; // Greek
-    if (/[\u0590-\u05FF]/.test(text)) return 'he'; // Hebrew
     if (/[àâäçéèêëîïôöùûü]/i.test(text)) return 'fr'; // French
     if (/[ñ¿¡]/i.test(text)) return 'es'; // Spanish
     if (/[äöüß]/i.test(text)) return 'de'; // German
-    if (/[àèéìòù]/i.test(text)) return 'it'; // Italian
-    if (/[ãõç]/i.test(text)) return 'pt'; // Portuguese
     return 'en'; // Default English
 }
 
 async function speakResponse(text) {
     if (!text) return;
     
-    // Stop any ongoing audio or local speech synthesis
     audioPlayer.pause();
     if (window.speechSynthesis) window.speechSynthesis.cancel();
     
@@ -158,19 +138,18 @@ async function speakResponse(text) {
     updateBubble("🎙️ Generating Voice...");
 
     try {
-        // Ask backend to generate Cloud TTS audio (Microsoft Azure Neural Voices)
         const response = await fetch('https://aura-assistant-34ri.onrender.com/tts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text, lang: langPrefix })
         });
 
-        if (!response.ok) throw new Error("TTS fetch failed");
+        if (response.status === 204 || !response.ok) throw new Error("Cloud TTS unavailable");
 
-        // Convert response to an audio MP3 blob
         const blob = await response.blob();
+        if (blob.size < 100) throw new Error("Audio file is empty");
+
         const audioUrl = URL.createObjectURL(blob);
-        
         audioPlayer.src = audioUrl;
         
         audioPlayer.onplay = () => {
@@ -184,26 +163,46 @@ async function speakResponse(text) {
             setAuraState('idle');
         };
 
-        // Play the high-quality cloud voice!
-        await audioPlayer.play();
+        await audioPlayer.play().catch(e => {
+            console.error("Browser blocked autoplay:", e);
+            useFallbackVoice(text, langPrefix);
+        });
         
     } catch (error) {
-        console.error("Voice Generation Error:", error);
-        updateBubble("⚠️ Voice Error");
-        setAuraState('idle');
+        console.error("Cloud Voice Error. Falling back to local voice:", error.message);
+        useFallbackVoice(text, langPrefix);
     }
 }
 
+// Fallback Local Voice Function (Uses Browser's Built-in Voices)
+function useFallbackVoice(text, langPrefix) {
+    if (!window.speechSynthesis) {
+        updateBubble("⚠️ Voice Error");
+        setAuraState('idle');
+        return;
+    }
+    
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = langPrefix === 'en' ? 'en-US' : langPrefix;
+    
+    const voices = window.speechSynthesis.getVoices();
+    const matchedVoice = voices.find(v => v.lang.startsWith(langPrefix));
+    if (matchedVoice) utterance.voice = matchedVoice;
+    
+    utterance.onstart = () => { setAuraState('speaking'); updateBubble("🔊 Speaking..."); };
+    utterance.onend = () => { setAuraState('idle'); };
+    
+    window.speechSynthesis.speak(utterance);
+}
 
 // --- SEND TO MULTI-AI BACKEND ---
 
 async function sendToAI(text) {
     isProcessing = true;
     setAuraState('processing');
-    updateBubble("⚙️ Consulting 15+ AIs..."); // Multi-AI Consensus UI update
+    updateBubble("⚙️ Consulting 5 AIs...");
     
     try {
-        // Live Render backend URL
         const response = await fetch('https://aura-assistant-34ri.onrender.com/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -216,7 +215,6 @@ async function sendToAI(text) {
         addMessageToUI('assistant', aiReply);
         isProcessing = false;
         
-        // Trigger Cloud TTS
         await speakResponse(aiReply);
         
     } catch (error) {
@@ -226,7 +224,6 @@ async function sendToAI(text) {
         isProcessing = false;
     }
 }
-
 
 // --- SPEECH RECOGNITION EVENT HANDLERS ---
 
@@ -255,13 +252,11 @@ if (recognition) {
     };
 }
 
-
 // --- AURA ROBOT CLICK EVENT ---
 
 auraRobot.addEventListener('click', () => {
     if (!CURRENT_USER_ID) return alert("Please login first.");
     
-    // If AURA is busy, force stop everything
     if (isListening || isProcessing || isSpeaking) {
         if (isListening) recognition.stop();
         if (isSpeaking) {
@@ -272,7 +267,6 @@ auraRobot.addEventListener('click', () => {
         return;
     }
     
-    // Start listening
     if (recognition) {
         recognition.start();
     }
