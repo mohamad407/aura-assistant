@@ -13,6 +13,7 @@ let isProcessing = false;
 let isSpeaking = false;
 let CURRENT_USER_ID = null;
 
+// Audio Player for Cloud TTS
 let audioPlayer = new Audio();
 
 // --- LIVE TIME & WEATHER WIDGET ---
@@ -173,9 +174,6 @@ function addMessageToUI(role, text, save = true) {
     msgDiv.textContent = text;
     historyContainer.appendChild(msgDiv);
     historyContainer.scrollTop = historyContainer.scrollHeight;
-    
-    // Note: We don't manually append to sessionHistory here. 
-    // When the user refreshes, loadHistory() will fetch the new logs from DB.
 }
 
 // --- AURA ROBOT ANIMATIONS & STATES ---
@@ -295,16 +293,23 @@ async function sendToAI(text) {
             body: JSON.stringify({ text: text, userId: CURRENT_USER_ID })
         });
         
+        // SAFETY CHECK: If backend crashes (404/500), handle it gracefully
+        if (!response.ok) {
+            throw new Error(`Backend returned status: ${response.status}`);
+        }
+
         const data = await response.json();
         const aiReply = data.reply || "I'm sorry, I didn't get that.";
         
         addMessageToUI('assistant', aiReply);
         isProcessing = false;
         
+        // Trigger Cloud TTS
         await speakResponse(aiReply);
         
     } catch (error) {
         console.error("Error fetching AI:", error);
+        addMessageToUI('assistant', "Connection to the Neural Network was lost. Please try again in a moment.");
         updateBubble("⚠️ Connection Error");
         setAuraState('idle');
         isProcessing = false;
