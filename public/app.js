@@ -403,11 +403,17 @@ conversationTimer = setTimeout(() => {
 
   commandRecognition.onerror = (e) => {
     console.error("Command recognition error:", e.error);
-    updateBubble("Didn't catch that. Say 'Aura' again.");
-    setAuraState('idle');
+
     isListening = false;
-    restartWakeWord();
-  };
+
+    if (conversationMode) {
+        setTimeout(() => {
+            triggerCommandListening();
+        }, 1000);
+    } else {
+        restartWakeWord();
+    }
+};
 
   commandRecognition.onend = () => {
     console.log("🔴 Command listening ended");
