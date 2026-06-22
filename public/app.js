@@ -80,8 +80,8 @@ if (recognition) {
 async function loadHistory() {
     if (!CURRENT_USER_ID) return;
     try {
-        // NOTE: Change URL to your Render backend URL when deployed
-        const response = await fetch(`http://localhost:3000/history/${CURRENT_USER_ID}`);
+        // ✅ FIXED: Using your live Render backend URL
+        const response = await fetch(`https://aura-assistant-34ri.onrender.com/history/${CURRENT_USER_ID}`);
         const history = await response.json();
         
         historyContainer.innerHTML = '';
@@ -149,8 +149,8 @@ async function sendToAI(text) {
     updateBubble("⚙️ Consulting 15+ AIs..."); // Multi-AI Consensus UI update
     
     try {
-        // NOTE: Change URL to your Render backend URL when deployed
-        const response = await fetch('http://localhost:3000/chat', {
+        // ✅ FIXED: Using your live Render backend URL
+        const response = await fetch('https://aura-assistant-34ri.onrender.com/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text: text, userId: CURRENT_USER_ID })
