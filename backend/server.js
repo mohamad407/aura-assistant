@@ -311,4 +311,4 @@ app.post('/chat', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => console.log(`🚀 AURA Multi-AI Backend running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 AURA  Multi-AI Backend running on port ${PORT}`));
