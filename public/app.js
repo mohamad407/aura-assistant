@@ -206,71 +206,43 @@ function handleLocalCommands(transcript) {
   if (!transcript || transcript.trim().length === 0) return false;
 
   const lower = transcript.toLowerCase().trim();
+
   // Greetings
-if (
+  if (
     lower === "hi" ||
     lower === "hello" ||
     lower === "hey"
-) {
+  ) {
     const msg = "Hello! How are you today?";
     addMessageToUI('assistant', msg);
     speakResponse(msg);
     return true;
-}
+  }
 
-// How are you
-if (
-    lower.includes("how are you")
-) {
+  // How are you
+  if (lower.includes("how are you")) {
     const msg = "I'm doing great. How can I help you?";
     addMessageToUI('assistant', msg);
     speakResponse(msg);
     return true;
-}
-
-  console.log(`📝 Processing command: "${lower}"`);
-
-  // 1. Play song command (IMPROVED PATTERNS)
-  const playPatterns = [
-    /^play\s+.+/i,
-    /^play\s+.+\s+song/i,
-    /play\s+(?:me\s+)?(.+)(?:\s+song)?/i
-  ];
-  if (playPatterns.some(p => p.test(lower))) {
-    console.log("✅ Matched PLAY pattern");
-    return handlePlaySong(transcript);
   }
 
-  // 2. Open / launch app command (IMPROVED PATTERNS)
-  const openPatterns = [
-    /^open\s+/i,
-    /^launch\s+/i,
-    /^start\s+/i,
-    /^go to\s+/i,
-    /^take me to\s+/i,
-    /^switch to\s+/i,
-    /^show me\s+/i
-  ];
-  if (openPatterns.some(p => p.test(lower))) {
-    console.log("✅ Matched OPEN pattern");
-    const handled = handleOpenApp(lower);
-    if (handled) return true;
+  // Creator information
+  if (
+    lower.includes("who discovered you") ||
+    lower.includes("who created you") ||
+    lower.includes("who made you")
+  ) {
+    const msg =
+      "I was created by Mohammed Asif on June 22, 2026. I am Aura, powered by more than 15 AI models working together.";
+
+    addMessageToUI('assistant', msg);
+    speakResponse(msg);
+    return true;
   }
 
-  // 3. Direct app name (without open keyword)
-  for (const appName of Object.keys(APP_URLS)) {
-    const exactPattern = new RegExp(`^${appName}$`, 'i');
-    if (exactPattern.test(lower)) {
-      console.log(`✅ Matched app name: ${appName}`);
-      return handleOpenApp(appName);
-    }
-  }
-
-  console.log("❌ No local command matched, sending to AI");
-  return false; // Not handled locally, send to AI
-
-if (lower.startsWith("call ")) {
-
+  // Call command
+  if (lower.startsWith("call ")) {
     const person = lower.replace("call ", "").trim();
 
     const msg = `Calling ${person}`;
@@ -281,8 +253,54 @@ if (lower.startsWith("call ")) {
     window.location.href = `tel:${person}`;
 
     return true;
+  }
+
+  console.log(`📝 Processing command: "${lower}"`);
+
+  // Play song command
+  const playPatterns = [
+    /^play\s+.+/i,
+    /^play\s+.+\s+song/i,
+    /play\s+(?:me\s+)?(.+)(?:\s+song)?/i
+  ];
+
+  if (playPatterns.some(p => p.test(lower))) {
+    console.log("✅ Matched PLAY pattern");
+    return handlePlaySong(transcript);
+  }
+
+  // Open app command
+  const openPatterns = [
+    /^open\s+/i,
+    /^launch\s+/i,
+    /^start\s+/i,
+    /^go to\s+/i,
+    /^take me to\s+/i,
+    /^switch to\s+/i,
+    /^show me\s+/i
+  ];
+
+  if (openPatterns.some(p => p.test(lower))) {
+    console.log("✅ Matched OPEN pattern");
+
+    const handled = handleOpenApp(lower);
+
+    if (handled) return true;
+  }
+
+  // Direct app names
+  for (const appName of Object.keys(APP_URLS)) {
+    const exactPattern = new RegExp(`^${appName}$`, 'i');
+
+    if (exactPattern.test(lower)) {
+      console.log(`✅ Matched app name: ${appName}`);
+      return handleOpenApp(appName);
+    }
+  }
+
+  console.log("❌ No local command matched, sending to AI");
+  return false;
 }
- }
 
 // ==========================================
 // 🎙️ WAKE WORD ENGINE — "Aura" trigger (IMPROVED)
