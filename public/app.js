@@ -160,6 +160,20 @@ function handlePlaySong(transcript) {
 // 📱 OPEN APP — Smart detection (IMPROVED)
 // ==========================================
 function handleOpenApp(transcript) {
+  if (
+    lower.includes("who discovered you") ||
+    lower.includes("who created you") ||
+    lower.includes("who made you")
+) {
+
+    const msg =
+      "I was created by Mohammed Asif on June 22, 2026. I am Aura, powered by more than 15 AI models working together.";
+
+    addMessageToUI('assistant', msg);
+    speakResponse(msg);
+
+    return true;
+}
   const lower = transcript.toLowerCase().trim();
 
   // Sort by longest key first to avoid partial matches
@@ -255,6 +269,19 @@ if (
   console.log("❌ No local command matched, sending to AI");
   return false; // Not handled locally, send to AI
 }
+if (lower.startsWith("call ")) {
+
+    const person = lower.replace("call ", "").trim();
+
+    const msg = `Calling ${person}`;
+
+    addMessageToUI('assistant', msg);
+    speakResponse(msg);
+
+    window.location.href = `tel:${person}`;
+
+    return true;
+}
 
 // ==========================================
 // 🎙️ WAKE WORD ENGINE — "Aura" trigger (IMPROVED)
@@ -323,9 +350,6 @@ function setupWakeWordListener() {
 
         speakResponse("Yes?");
 
-        setTimeout(() => {
-            triggerCommandListening();
-        }, 1000);
     }
 }
         triggerCommandListening();
@@ -436,21 +460,30 @@ commandRecognition.onresult = (event) => {
 
     restartWakeWord();
 };
-commandRecognition.onend = () => {
+  audioPlayer.onended = () => {
 
-    console.log("🔴 Command listening ended");
+    isSpeaking = false;
+    setAuraState('idle');
 
-    recognitionActive = false;
-    isListening = false;
+    if (conversationMode) {
 
-    showWakeWordIndicator(false);
+        setTimeout(() => {
+            triggerCommandListening();
+        }, 300);
+
+    } else {
+
+        restartWakeWord();
+
+    }
 };
-  try { 
-    commandRecognition.start(); 
-  } catch(e) {
-    console.error("Failed to start command listening:", e.message);
+
+ // try { 
+//    commandRecognition.start(); 
+// } catch(e) {
+  //  console.error("Failed to start command listening:", e.message);
   }
-}
+}//
 
 function restartWakeWord() {
   console.log("🔄 Restarting wake word listening...");
@@ -766,16 +799,13 @@ async function sendToAI(text) {
 
 // --- MANUAL ORB CLICK (fallback for tap-to-talk) ---
 auraRobot.addEventListener('click', () => {
-    if (!CURRENT_USER_ID) return alert("Please login first.");
+   try {
+    wakeRecognition && wakeRecognition.stop();
+} catch(e) {}
 
-    if (isListening || isProcessing || isSpeaking) {
-        if (isListening) {
-            try { commandRecognition && commandRecognition.stop(); } catch(e) {}
-        }
-        if (isSpeaking) {
-            audioPlayer.pause();
-            if (window.speechSynthesis) window.speechSynthesis.cancel();
-        }
+conversationMode = true;
+
+triggerCommandListening();
         setAuraState('idle');
         isListening = false;
         isSpeaking = false;
