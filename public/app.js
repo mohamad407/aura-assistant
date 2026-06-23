@@ -160,21 +160,21 @@ function handlePlaySong(transcript) {
 // 📱 OPEN APP — Smart detection (IMPROVED)
 // ==========================================
 function handleOpenApp(transcript) {
+  // ✅ FIX: Declare 'lower' FIRST before using it
+  const lower = transcript.toLowerCase().trim();
+
+  // Check creator information
   if (
     lower.includes("who discovered you") ||
     lower.includes("who created you") ||
     lower.includes("who made you")
-) {
-
+  ) {
     const msg =
       "I was created by Mohammed Asif on June 22, 2026. I am Aura, powered by more than 15 AI models working together.";
-
     addMessageToUI('assistant', msg);
     speakResponse(msg);
-
     return true;
-}
-  const lower = transcript.toLowerCase().trim();
+  }
 
   // Sort by longest key first to avoid partial matches
   const sortedApps = Object.entries(APP_URLS).sort((a, b) => b[0].length - a[0].length);
@@ -235,7 +235,6 @@ function handleLocalCommands(transcript) {
   ) {
     const msg =
       "I was created by Mohammed Asif on June 22, 2026. I am Aura, powered by more than 15 AI models working together.";
-
     addMessageToUI('assistant', msg);
     speakResponse(msg);
     return true;
@@ -244,14 +243,10 @@ function handleLocalCommands(transcript) {
   // Call command
   if (lower.startsWith("call ")) {
     const person = lower.replace("call ", "").trim();
-
     const msg = `Calling ${person}`;
-
     addMessageToUI('assistant', msg);
     speakResponse(msg);
-
     window.location.href = `tel:${person}`;
-
     return true;
   }
 
@@ -282,16 +277,13 @@ function handleLocalCommands(transcript) {
 
   if (openPatterns.some(p => p.test(lower))) {
     console.log("✅ Matched OPEN pattern");
-
     const handled = handleOpenApp(lower);
-
     if (handled) return true;
   }
 
   // Direct app names
   for (const appName of Object.keys(APP_URLS)) {
     const exactPattern = new RegExp(`^${appName}$`, 'i');
-
     if (exactPattern.test(lower)) {
       console.log(`✅ Matched app name: ${appName}`);
       return handleOpenApp(appName);
@@ -353,24 +345,15 @@ function setupWakeWordListener() {
 
     const wakeWordDetected = wakeWordPatterns.some(pattern => pattern.test(allText));
 
+    // ✅ FIX: Remove duplicate code block
     if (wakeWordDetected) {
       if (!isListening && !isProcessing && !isSpeaking && CURRENT_USER_ID) {
         console.log('✅ Wake word "AURA" DETECTED! Starting command listening...');
         try {
           wakeRecognition.stop();
         } catch(e) {}
-        if (wakeWordDetected) {
-    if (!isListening && !isProcessing && !isSpeaking && CURRENT_USER_ID) {
-        console.log('Wake word detected');
-
-        try {
-            wakeRecognition.stop();
-        } catch(e) {}
-
+        
         speakResponse("Yes?");
-
-    }
-}
         triggerCommandListening();
       }
     }
@@ -421,20 +404,18 @@ function setupWakeWordListener() {
 }
 
 function triggerCommandListening() {
+  if (recognitionActive) {
+    console.log("⚠️ Recognition already running");
+    return;
+  }
 
-    if (recognitionActive) {
-        console.log("⚠️ Recognition already running");
-        return;
-    }
+  recognitionActive = true;
+  console.log("🎤 Triggering command listening...");
 
-    recognitionActive = true;
-
-    console.log("🎤 Triggering command listening...");
-
-    showWakeWordIndicator(true);
-    updateBubble("Listening for your command... 👂");
-    speechBubble.classList.add('active');
-    auraRobot.classList.add('listening');
+  showWakeWordIndicator(true);
+  updateBubble("Listening for your command... 👂");
+  speechBubble.classList.add('active');
+  auraRobot.classList.add('listening');
 
   commandRecognition = new SpeechRecognition();
   commandRecognition.continuous = false;
@@ -448,61 +429,43 @@ function triggerCommandListening() {
     console.log("🎤 Command listening started");
   };
 
-commandRecognition.onresult = (event) => {
+  commandRecognition.onresult = (event) => {
     const transcript = event.results[0][0].transcript;
-
     console.log(`📝 Command transcript: "${transcript}"`);
 
     addMessageToUI('user', transcript);
 
     isListening = false;
-    recognitionActive = false;   // ADD THIS LINE
+    recognitionActive = false;
 
     const handled = handleLocalCommands(transcript);
 
     if (!handled) {
-        console.log("📤 Sending to AI backend...");
-        sendToAI(transcript);
+      console.log("📤 Sending to AI backend...");
+      sendToAI(transcript);
     }
-};
+  };
+
   commandRecognition.onerror = (e) => {
-
     console.error("Command recognition error:", e.error);
-
     recognitionActive = false;
     isListening = false;
 
     // Ignore Chrome abort errors
     if (e.error === "aborted") {
-        return;
+      return;
     }
 
     restartWakeWord();
-};
-  audioPlayer.onended = () => {
+  };
 
-    isSpeaking = false;
-    setAuraState('idle');
-
-    if (conversationMode) {
-
-        setTimeout(() => {
-            triggerCommandListening();
-        }, 300);
-
-    } else {
-
-        restartWakeWord();
-
-    }
-};
-
- // try { 
-//    commandRecognition.start(); 
-// } catch(e) {
-  //  console.error("Failed to start command listening:", e.message);
+  // ✅ FIX: Uncommented and properly start recognition
+  try { 
+    commandRecognition.start(); 
+  } catch(e) {
+    console.error("Failed to start command listening:", e.message);
   }
-
+}
 
 function restartWakeWord() {
   console.log("🔄 Restarting wake word listening...");
@@ -527,315 +490,344 @@ function showWakeWordIndicator(active) {
 
 // --- TAB NAVIGATION ---
 document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        document.querySelectorAll('.view-container').forEach(view => view.style.display = 'none');
-        const tab = btn.getAttribute('data-tab');
-        document.getElementById(`view-${tab}`).style.display = 'block';
-        if (tab === 'history') loadHistory();
-    });
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.view-container').forEach(view => view.style.display = 'none');
+    const tab = btn.getAttribute('data-tab');
+    document.getElementById(`view-${tab}`).style.display = 'block';
+    if (tab === 'history') loadHistory();
+  });
 });
 
 // --- LIVE TIME & WEATHER WIDGET ---
 function updateTime() {
-    const now = new Date();
-    document.getElementById('live-time').textContent = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-    document.getElementById('live-date').textContent = now.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+  const now = new Date();
+  document.getElementById('live-time').textContent = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+  document.getElementById('live-date').textContent = now.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
 }
+
 async function loadWeather() {
-    try {
-        const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=12.9716&longitude=79.1573&current_weather=true');
-        const data = await res.json();
-        document.getElementById('weather-temp').textContent = `${Math.round(data.current_weather.temperature)}°`;
-        let desc = "Clear";
-        if (data.current_weather.weathercode >= 51) desc = "Rain";
-        document.getElementById('weather-desc').textContent = desc;
-    } catch(e) { document.getElementById('weather-desc').textContent = "N/A"; }
+  try {
+    const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=12.9716&longitude=79.1573&current_weather=true');
+    const data = await res.json();
+    document.getElementById('weather-temp').textContent = `${Math.round(data.current_weather.temperature)}°`;
+    let desc = "Clear";
+    if (data.current_weather.weathercode >= 51) desc = "Rain";
+    document.getElementById('weather-desc').textContent = desc;
+  } catch(e) { 
+    document.getElementById('weather-desc').textContent = "N/A"; 
+  }
 }
-updateTime(); loadWeather();
-setInterval(updateTime, 1000); setInterval(loadWeather, 600000);
+
+updateTime();
+loadWeather();
+setInterval(updateTime, 1000);
+setInterval(loadWeather, 600000);
 
 // --- FIREBASE AUTH EVENTS ---
 document.getElementById('signup-btn').addEventListener('click', () => {
-    const email = document.getElementById('email-input').value;
-    const password = document.getElementById('password-input').value;
-    if (!email || !password) return alert("Please enter email and password");
-    window.firebaseAuth.signInWithEmailAndPassword(window.firebaseAuth.auth, email, password)
-        .catch((error) => {
-            if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-                window.firebaseAuth.createUserWithEmailAndPassword(window.firebaseAuth.auth, email, password)
-                    .catch(err => alert(err.message));
-            } else { alert(error.message); }
-        });
+  const email = document.getElementById('email-input').value;
+  const password = document.getElementById('password-input').value;
+  if (!email || !password) return alert("Please enter email and password");
+  
+  window.firebaseAuth.signInWithEmailAndPassword(window.firebaseAuth.auth, email, password)
+    .catch((error) => {
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+        window.firebaseAuth.createUserWithEmailAndPassword(window.firebaseAuth.auth, email, password)
+          .catch(err => alert(err.message));
+      } else { 
+        alert(error.message); 
+      }
+    });
 });
+
 document.getElementById('google-btn').addEventListener('click', () => {
-    window.firebaseAuth.signInWithPopup(window.firebaseAuth.auth, window.firebaseAuth.provider)
-        .catch(err => alert(err.message));
+  window.firebaseAuth.signInWithPopup(window.firebaseAuth.auth, window.firebaseAuth.provider)
+    .catch(err => alert(err.message));
 });
+
 document.getElementById('logout-btn').addEventListener('click', () => {
-    wakeWordActive = false;
-    try { wakeRecognition && wakeRecognition.stop(); } catch(e) {}
-    window.firebaseAuth.signOut(window.firebaseAuth.auth);
+  wakeWordActive = false;
+  try { wakeRecognition && wakeRecognition.stop(); } catch(e) {}
+  window.firebaseAuth.signOut(window.firebaseAuth.auth);
 });
 
 window.firebaseAuth.onAuthStateChanged(window.firebaseAuth.auth, (user) => {
-    if (user) {
-        CURRENT_USER_ID = user.uid;
-        authScreen.style.display = 'none';
-        appContainer.style.display = 'flex';
-        console.log(`✅ User logged in: ${user.email}`);
-        // Start wake word listener after login with better delay
-        setTimeout(() => {
-            console.log("Starting wake word listener after login...");
-            setupWakeWordListener();
-        }, 1500);
-    } else {
-        CURRENT_USER_ID = null;
-        wakeWordActive = false;
-        try { wakeRecognition && wakeRecognition.stop(); } catch(e) {}
-        authScreen.style.display = 'flex';
-        appContainer.style.display = 'none';
-        console.log("User logged out");
-    }
+  if (user) {
+    CURRENT_USER_ID = user.uid;
+    authScreen.style.display = 'none';
+    appContainer.style.display = 'flex';
+    console.log(`✅ User logged in: ${user.email}`);
+    // Start wake word listener after login with better delay
+    setTimeout(() => {
+      console.log("Starting wake word listener after login...");
+      setupWakeWordListener();
+    }, 1500);
+  } else {
+    CURRENT_USER_ID = null;
+    wakeWordActive = false;
+    try { wakeRecognition && wakeRecognition.stop(); } catch(e) {}
+    authScreen.style.display = 'flex';
+    appContainer.style.display = 'none';
+    console.log("User logged out");
+  }
 });
 
 // --- MONGODB HISTORY MANAGEMENT ---
 async function loadHistory() {
-    if (!CURRENT_USER_ID) return;
-    try {
-        sessionHistory.innerHTML = '<div class="empty-state small"><p>Loading history...</p></div>';
-        const response = await fetch(`https://aura-assistant-34ri.onrender.com/history/${CURRENT_USER_ID}`);
-        const history = await response.json();
-        
-        if (!Array.isArray(history) || history.length === 0) {
-            sessionHistory.innerHTML = '<div class="empty-state small"><p>No conversation history yet.</p></div>';
-            return;
-        }
-        
-        sessionHistory.innerHTML = '';
-        const groups = {};
-        const today = new Date().setHours(0,0,0,0);
-        const yesterday = today - (24 * 60 * 60 * 1000);
-
-        history.forEach(msg => {
-            const d = new Date(msg.timestamp).setHours(0,0,0,0);
-            let label;
-            if (d === today) label = "Today";
-            else if (d === yesterday) label = "Yesterday";
-            else label = new Date(msg.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
-            if (!groups[label]) groups[label] = [];
-            groups[label].push(msg);
-        });
-
-        for (const dateLabel in groups) {
-            const groupDiv = document.createElement('div');
-            groupDiv.className = 'history-day-group';
-            
-            const headerDiv = document.createElement('div');
-            headerDiv.className = 'history-day-header';
-            headerDiv.textContent = `📅 ${dateLabel}`;
-            
-            headerDiv.addEventListener('click', () => {
-                historyContainer.innerHTML = '';
-                groups[dateLabel].forEach(m => addMessageToUI(m.role, m.text));
-                document.querySelector('.tab-btn[data-tab="chat"]').click();
-            });
-            
-            groupDiv.appendChild(headerDiv);
-
-            groups[dateLabel].forEach(msg => {
-                const msgDiv = document.createElement('div');
-                msgDiv.className = `history-msg ${msg.role}`;
-                const shortText = msg.text.substring(0, 100) + (msg.text.length > 100 ? '...' : '');
-                msgDiv.innerHTML = `<span class="history-role">${msg.role}</span>${shortText}`;
-                groupDiv.appendChild(msgDiv);
-            });
-
-            sessionHistory.appendChild(groupDiv);
-        }
-    } catch (error) {
-        console.error("History load error:", error);
-        sessionHistory.innerHTML = '<div class="empty-state small"><p>Error loading history.</p></div>';
+  if (!CURRENT_USER_ID) return;
+  try {
+    sessionHistory.innerHTML = '<div class="empty-state small"><p>Loading history...</p></div>';
+    const response = await fetch(`https://aura-assistant-34ri.onrender.com/history/${CURRENT_USER_ID}`);
+    const history = await response.json();
+    
+    if (!Array.isArray(history) || history.length === 0) {
+      sessionHistory.innerHTML = '<div class="empty-state small"><p>No conversation history yet.</p></div>';
+      return;
     }
+    
+    sessionHistory.innerHTML = '';
+    const groups = {};
+    const today = new Date().setHours(0,0,0,0);
+    const yesterday = today - (24 * 60 * 60 * 1000);
+
+    history.forEach(msg => {
+      const d = new Date(msg.timestamp).setHours(0,0,0,0);
+      let label;
+      if (d === today) label = "Today";
+      else if (d === yesterday) label = "Yesterday";
+      else label = new Date(msg.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+      if (!groups[label]) groups[label] = [];
+      groups[label].push(msg);
+    });
+
+    for (const dateLabel in groups) {
+      const groupDiv = document.createElement('div');
+      groupDiv.className = 'history-day-group';
+      
+      const headerDiv = document.createElement('div');
+      headerDiv.className = 'history-day-header';
+      headerDiv.textContent = `📅 ${dateLabel}`;
+      
+      headerDiv.addEventListener('click', () => {
+        historyContainer.innerHTML = '';
+        groups[dateLabel].forEach(m => addMessageToUI(m.role, m.text));
+        document.querySelector('.tab-btn[data-tab="chat"]').click();
+      });
+      
+      groupDiv.appendChild(headerDiv);
+
+      groups[dateLabel].forEach(msg => {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `history-msg ${msg.role}`;
+        const shortText = msg.text.substring(0, 100) + (msg.text.length > 100 ? '...' : '');
+        msgDiv.innerHTML = `<span class="history-role">${msg.role}</span>${shortText}`;
+        groupDiv.appendChild(msgDiv);
+      });
+
+      sessionHistory.appendChild(groupDiv);
+    }
+  } catch (error) {
+    console.error("History load error:", error);
+    sessionHistory.innerHTML = '<div class="empty-state small"><p>Error loading history.</p></div>';
+  }
 }
 
 function addMessageToUI(role, text) {
-    const emptyState = historyContainer.querySelector('.empty-state');
-    if (emptyState) emptyState.remove();
+  const emptyState = historyContainer.querySelector('.empty-state');
+  if (emptyState) emptyState.remove();
 
-    const msgDiv = document.createElement('div');
-    msgDiv.classList.add('message', role);
-    msgDiv.textContent = text;
-    historyContainer.appendChild(msgDiv);
-    historyContainer.scrollTop = historyContainer.scrollHeight;
+  const msgDiv = document.createElement('div');
+  msgDiv.classList.add('message', role);
+  msgDiv.textContent = text;
+  historyContainer.appendChild(msgDiv);
+  historyContainer.scrollTop = historyContainer.scrollHeight;
 }
 
 // --- AURA ROBOT ANIMATIONS & STATES ---
 function setAuraState(state) {
-    auraRobot.classList.remove('listening', 'processing', 'speaking');
-    if (state === 'idle') {
-        speechBubble.classList.remove('active');
-    } else {
-        auraRobot.classList.add(state);
-        speechBubble.classList.add('active');
-    }
+  auraRobot.classList.remove('listening', 'processing', 'speaking');
+  if (state === 'idle') {
+    speechBubble.classList.remove('active');
+  } else {
+    auraRobot.classList.add(state);
+    speechBubble.classList.add('active');
+  }
 }
-function updateBubble(text) { bubbleText.textContent = text; }
+
+function updateBubble(text) { 
+  bubbleText.textContent = text; 
+}
 
 // --- LANGUAGE DETECTION ---
 function detectLanguage(text) {
-    if (/[\u0B80-\u0BFF]/.test(text)) return 'ta';
-    if (/[\u0900-\u097F]/.test(text)) return 'hi';
-    if (/[\u0980-\u09FF]/.test(text)) return 'bn';
-    if (/[\u0D00-\u0D7F]/.test(text)) return 'ml';
-    if (/[\u0C00-\u0C7F]/.test(text)) return 'te';
-    if (/[\u0600-\u06FF]/.test(text)) return 'ar';
-    if (/[\u4E00-\u9FFF]/.test(text)) return 'zh';
-    if (/[\u3040-\u30FF]/.test(text)) return 'ja';
-    if (/[\uAC00-\uD7AF]/.test(text)) return 'ko';
-    if (/[\u0400-\u04FF]/.test(text)) return 'ru';
-    if (/[àâäçéèêëîïôöùûü]/i.test(text)) return 'fr';
-    if (/[ñ¿¡]/i.test(text)) return 'es';
-    if (/[äöüß]/i.test(text)) return 'de';
-    return 'en';
+  if (/[\u0B80-\u0BFF]/.test(text)) return 'ta';
+  if (/[\u0900-\u097F]/.test(text)) return 'hi';
+  if (/[\u0980-\u09FF]/.test(text)) return 'bn';
+  if (/[\u0D00-\u0D7F]/.test(text)) return 'ml';
+  if (/[\u0C00-\u0C7F]/.test(text)) return 'te';
+  if (/[\u0600-\u06FF]/.test(text)) return 'ar';
+  if (/[\u4E00-\u9FFF]/.test(text)) return 'zh';
+  if (/[\u3040-\u30FF]/.test(text)) return 'ja';
+  if (/[\uAC00-\uD7AF]/.test(text)) return 'ko';
+  if (/[\u0400-\u04FF]/.test(text)) return 'ru';
+  if (/[àâäçéèêëîïôöùûü]/i.test(text)) return 'fr';
+  if (/[ñ¿¡]/i.test(text)) return 'es';
+  if (/[äöüß]/i.test(text)) return 'de';
+  return 'en';
 }
 
 async function speakResponse(text) {
-    if (!text) return;
-    audioPlayer.pause();
-    if (window.speechSynthesis) window.speechSynthesis.cancel();
+  if (!text) return;
+  
+  audioPlayer.pause();
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  
+  const langPrefix = detectLanguage(text);
+  setAuraState('processing');
+  updateBubble("Generating voice...");
+
+  try {
+    const response = await fetch('https://aura-assistant-34ri.onrender.com/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, lang: langPrefix })
+    });
     
-    const langPrefix = detectLanguage(text);
-    setAuraState('processing');
-    updateBubble("Generating voice...");
+    if (response.status === 204 || !response.ok) throw new Error("Cloud TTS unavailable");
+    
+    const blob = await response.blob();
+    if (blob.size < 100) throw new Error("Audio file is empty");
 
-    try {
-        const response = await fetch('https://aura-assistant-34ri.onrender.com/tts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text, lang: langPrefix })
-        });
-        if (response.status === 204 || !response.ok) throw new Error("Cloud TTS unavailable");
-        const blob = await response.blob();
-        if (blob.size < 100) throw new Error("Audio file is empty");
+    const audioUrl = URL.createObjectURL(blob);
+    audioPlayer.src = audioUrl;
+    
+    audioPlayer.onplay = () => { 
+      isSpeaking = true; 
+      setAuraState('speaking'); 
+      updateBubble("Speaking..."); 
+    };
+    
+    // ✅ FIX: Single, unified onended handler
+    audioPlayer.onended = () => {
+      isSpeaking = false;
+      setAuraState('idle');
 
-        const audioUrl = URL.createObjectURL(blob);
-        audioPlayer.src = audioUrl;
-        audioPlayer.onplay = () => { isSpeaking = true; setAuraState('speaking'); updateBubble("Speaking..."); };
-       audioPlayer.onended = () => {
-    isSpeaking = false;
-    setAuraState('idle');
-
-    if (conversationMode) {
+      if (conversationMode) {
         setTimeout(() => {
-            triggerCommandListening();
+          triggerCommandListening();
         }, 500);
-    } else {
+      } else {
         restartWakeWord();
-    }
-};
-        await audioPlayer.play().catch(e => useFallbackVoice(text, langPrefix));
-    } catch (error) {
-        console.error("Cloud Voice Error. Falling back:", error.message);
-        useFallbackVoice(text, langPrefix);
-    }
+      }
+    };
+    
+    await audioPlayer.play().catch(e => useFallbackVoice(text, langPrefix));
+  } catch (error) {
+    console.error("Cloud Voice Error. Falling back:", error.message);
+    useFallbackVoice(text, langPrefix);
+  }
 }
 
 function useFallbackVoice(text, langPrefix) {
-    if (!window.speechSynthesis) { updateBubble("Voice Error"); setAuraState('idle'); return; }
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = langPrefix === 'en' ? 'en-US' : langPrefix;
-    const voices = window.speechSynthesis.getVoices();
-    const matchedVoice = voices.find(v => v.lang.startsWith(langPrefix));
-    if (matchedVoice) utterance.voice = matchedVoice;
-    utterance.onstart = () => { isSpeaking = true; setAuraState('speaking'); updateBubble("Speaking..."); };
-    utterance.onend = () => {
-        isSpeaking = false;
-        setAuraState('idle');
-        restartWakeWord();
-    };
-    window.speechSynthesis.speak(utterance);
+  if (!window.speechSynthesis) { 
+    updateBubble("Voice Error"); 
+    setAuraState('idle'); 
+    return; 
+  }
+  
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = langPrefix === 'en' ? 'en-US' : langPrefix;
+  
+  const voices = window.speechSynthesis.getVoices();
+  const matchedVoice = voices.find(v => v.lang.startsWith(langPrefix));
+  if (matchedVoice) utterance.voice = matchedVoice;
+  
+  utterance.onstart = () => { 
+    isSpeaking = true; 
+    setAuraState('speaking'); 
+    updateBubble("Speaking..."); 
+  };
+  
+  utterance.onend = () => {
+    isSpeaking = false;
+    setAuraState('idle');
+    restartWakeWord();
+  };
+  
+  window.speechSynthesis.speak(utterance);
 }
 
 // --- SEND TO MULTI-AI BACKEND ---
 async function sendToAI(text) {
-    isProcessing = true;
-    setAuraState('processing');
-    updateBubble("Consulting AIs...");
+  isProcessing = true;
+  setAuraState('processing');
+  updateBubble("Consulting AIs...");
+  
+  try {
+    const response = await fetch('https://aura-assistant-34ri.onrender.com/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text, userId: CURRENT_USER_ID })
+    });
     
-    try {
-        const response = await fetch('https://aura-assistant-34ri.onrender.com/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: text, userId: CURRENT_USER_ID })
-        });
-        if (!response.ok) throw new Error(`Backend error: ${response.status}`);
-        const data = await response.json();
-        let aiReply = data.reply || "I'm sorry, I didn't get that.";
+    if (!response.ok) throw new Error(`Backend error: ${response.status}`);
+    
+    const data = await response.json();
+    let aiReply = data.reply || "I'm sorry, I didn't get that.";
+    
+    console.log(`📤 AI Reply received (${aiReply.length} chars)`);
+    
+    // ACTION PARSER (Open Apps / Call)
+    if (aiReply.includes("ACTION: URL:")) {
+      const urlMatch = aiReply.match(/ACTION:\s*URL:\s*([^\s\n]+)/i);
+      if (urlMatch && urlMatch[1]) {
+        const actionUrl = urlMatch[1].trim();
         
-        console.log(`📤 AI Reply received (${aiReply.length} chars)`);
+        let friendlyMsg = "Opening the requested application...";
+        if (actionUrl.startsWith("tel:")) friendlyMsg = "Opening your phone dialer...";
+        if (actionUrl.startsWith("sms:")) friendlyMsg = "Opening your messaging app...";
+        if (actionUrl.includes("youtube.com")) friendlyMsg = "Opening YouTube...";
+        if (actionUrl.includes("whatsapp.com")) friendlyMsg = "Opening WhatsApp...";
+        if (actionUrl.includes("spotify.com")) friendlyMsg = "Opening Spotify...";
         
-        // ACTION PARSER (Open Apps / Call)
-        if (aiReply.includes("ACTION: URL:")) {
-            const urlMatch = aiReply.match(/ACTION:\s*URL:\s*([^\s\n]+)/i);
-            if (urlMatch && urlMatch[1]) {
-                const actionUrl = urlMatch[1].trim();
-                
-                let friendlyMsg = "Opening the requested application...";
-                if (actionUrl.startsWith("tel:")) friendlyMsg = "Opening your phone dialer...";
-                if (actionUrl.startsWith("sms:")) friendlyMsg = "Opening your messaging app...";
-                if (actionUrl.includes("youtube.com")) friendlyMsg = "Opening YouTube...";
-                if (actionUrl.includes("whatsapp.com")) friendlyMsg = "Opening WhatsApp...";
-                if (actionUrl.includes("spotify.com")) friendlyMsg = "Opening Spotify...";
-                
-                addMessageToUI('assistant', friendlyMsg);
-                await speakResponse(friendlyMsg);
-                setTimeout(() => { 
-                  const newWindow = window.open(actionUrl, '_blank');
-                  if (!newWindow) {
-                    window.location.href = actionUrl;
-                  }
-                }, 1000);
-                isProcessing = false;
-                return;
-            }
-        }
-        
-        addMessageToUI('assistant', aiReply);
+        addMessageToUI('assistant', friendlyMsg);
+        await speakResponse(friendlyMsg);
+        setTimeout(() => { 
+          const newWindow = window.open(actionUrl, '_blank');
+          if (!newWindow) {
+            window.location.href = actionUrl;
+          }
+        }, 1000);
         isProcessing = false;
-        await speakResponse(aiReply);
-        
-    } catch (error) {
-        console.error("Error fetching AI:", error);
-        addMessageToUI('assistant', "Connection lost. Please try again.");
-        updateBubble("Error");
-        setAuraState('idle');
-        isProcessing = false;
-        restartWakeWord();
+        return;
+      }
     }
+    
+    addMessageToUI('assistant', aiReply);
+    isProcessing = false;
+    await speakResponse(aiReply);
+    
+  } catch (error) {
+    console.error("Error fetching AI:", error);
+    addMessageToUI('assistant', "Connection lost. Please try again.");
+    updateBubble("Error");
+    setAuraState('idle');
+    isProcessing = false;
+    restartWakeWord();
+  }
 }
 
 // --- MANUAL ORB CLICK (fallback for tap-to-talk) ---
 auraRobot.addEventListener('click', () => {
-   try {
+  console.log("📱 Tap detected - starting command listening...");
+  try {
     wakeRecognition && wakeRecognition.stop();
-} catch(e) {}
+  } catch(e) {}
 
-conversationMode = true;
-
-triggerCommandListening();
-        setAuraState('idle');
-        isListening = false;
-        isSpeaking = false;
-        restartWakeWord();
-        return;
-    }
-
-    // Manual tap triggers command listening directly
-    console.log("📱 Tap detected - starting command listening...");
-    try { wakeRecognition && wakeRecognition.stop(); } catch(e) {}
-    triggerCommandListening();
+  conversationMode = true;
+  triggerCommandListening();
 });
 
 // Initial state
