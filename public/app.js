@@ -19,8 +19,7 @@ let wakeWordActive = false;
 let wakeRecognition = null;
 let commandRecognition = null;
 let wakeWordRetryCount = 0;
-let conversationMode = false;
-let conversationTimer = null;
+let continuousListeningMode = false;  // ✅ NEW: Continuous mode flag
 let recognitionActive = false;
 
 // ==========================================
@@ -160,7 +159,6 @@ function handlePlaySong(transcript) {
 // 📱 OPEN APP — Smart detection (IMPROVED)
 // ==========================================
 function handleOpenApp(transcript) {
-  // ✅ FIX: Declare 'lower' FIRST before using it
   const lower = transcript.toLowerCase().trim();
 
   // Check creator information
@@ -206,6 +204,16 @@ function handleLocalCommands(transcript) {
   if (!transcript || transcript.trim().length === 0) return false;
 
   const lower = transcript.toLowerCase().trim();
+
+  // ✅ NEW: Stop command to exit continuous mode
+  if (lower === "stop" || lower === "stop listening" || lower === "quit") {
+    console.log("🛑 Stop command detected - exiting continuous listening mode");
+    continuousListeningMode = false;
+    const msg = "Okay, stopping. Say Aura to wake me again!";
+    addMessageToUI('assistant', msg);
+    speakResponse(msg);
+    return true;
+  }
 
   // Greetings
   if (
@@ -345,24 +353,28 @@ function setupWakeWordListener() {
 
     const wakeWordDetected = wakeWordPatterns.some(pattern => pattern.test(allText));
 
-    // ✅ FIX: Remove duplicate code block
     if (wakeWordDetected) {
       if (!isListening && !isProcessing && !isSpeaking && CURRENT_USER_ID) {
-        console.log('✅ Wake word "AURA" DETECTED! Starting command listening...');
+        console.log('✅ Wake word "AURA" DETECTED! Starting continuous listening...');
         try {
           wakeRecognition.stop();
         } catch(e) {}
         
-        speakResponse("Yes?");
-        triggerCommandListening();
+        // ✅ Respond "Yes" and enter continuous listening mode
+        speakResponse("Yes");
+        
+        setTimeout(() => {
+          continuousListeningMode = true;
+          triggerCommandListening();
+        }, 1200);
       }
     }
   };
 
   wakeRecognition.onend = () => {
     console.log("🔴 Wake word listener ended");
-    // Restart wake word listener unless we're in a command session
-    if (!isListening && !isProcessing && !isSpeaking && CURRENT_USER_ID && wakeWordActive) {
+    // Restart wake word listener unless we're in command session
+    if (!isListening && !isProcessing && !isSpeaking && CURRENT_USER_ID && wakeWordActive && !continuousListeningMode) {
       console.log("🔄 Restarting wake word listener...");
       setTimeout(() => {
         try { 
@@ -410,7 +422,7 @@ function triggerCommandListening() {
   }
 
   recognitionActive = true;
-  console.log("🎤 Triggering command listening...");
+  console.log("🎤 Triggering command listening... (Continuous: " + continuousListeningMode + ")");
 
   showWakeWordIndicator(true);
   updateBubble("Listening for your command... 👂");
@@ -456,10 +468,9 @@ function triggerCommandListening() {
       return;
     }
 
-    restartWakeWord();
+    restartAfterCommand();
   };
 
-  // ✅ FIX: Uncommented and properly start recognition
   try { 
     commandRecognition.start(); 
   } catch(e) {
@@ -467,9 +478,24 @@ function triggerCommandListening() {
   }
 }
 
+// ✅ NEW: Handle restart based on mode
+function restartAfterCommand() {
+  if (continuousListeningMode) {
+    console.log("🔄 Continuous mode: restarting listening...");
+    setTimeout(() => {
+      recognitionActive = false;
+      triggerCommandListening();
+    }, 500);
+  } else {
+    console.log("🔄 Normal mode: restarting wake word...");
+    restartWakeWord();
+  }
+}
+
 function restartWakeWord() {
   console.log("🔄 Restarting wake word listening...");
   showWakeWordIndicator(false);
+  continuousListeningMode = false;  // ✅ Reset mode
   if (CURRENT_USER_ID && wakeWordActive) {
     setTimeout(() => {
       try { 
@@ -549,6 +575,7 @@ document.getElementById('google-btn').addEventListener('click', () => {
 
 document.getElementById('logout-btn').addEventListener('click', () => {
   wakeWordActive = false;
+  continuousListeningMode = false;  // ✅ Reset on logout
   try { wakeRecognition && wakeRecognition.stop(); } catch(e) {}
   window.firebaseAuth.signOut(window.firebaseAuth.auth);
 });
@@ -559,7 +586,7 @@ window.firebaseAuth.onAuthStateChanged(window.firebaseAuth.auth, (user) => {
     authScreen.style.display = 'none';
     appContainer.style.display = 'flex';
     console.log(`✅ User logged in: ${user.email}`);
-    // Start wake word listener after login with better delay
+    // Start wake word listener after login
     setTimeout(() => {
       console.log("Starting wake word listener after login...");
       setupWakeWordListener();
@@ -567,6 +594,7 @@ window.firebaseAuth.onAuthStateChanged(window.firebaseAuth.auth, (user) => {
   } else {
     CURRENT_USER_ID = null;
     wakeWordActive = false;
+    continuousListeningMode = false;  // ✅ Reset on logout
     try { wakeRecognition && wakeRecognition.stop(); } catch(e) {}
     authScreen.style.display = 'flex';
     appContainer.style.display = 'none';
@@ -709,16 +737,20 @@ async function speakResponse(text) {
       updateBubble("Speaking..."); 
     };
     
-    // ✅ FIX: Single, unified onended handler
+    // ✅ Unified onended handler
     audioPlayer.onended = () => {
       isSpeaking = false;
       setAuraState('idle');
 
-      if (conversationMode) {
+      if (continuousListeningMode) {
+        // ✅ In continuous mode, restart listening immediately after speaking
+        console.log("🔄 Continuous mode: restarting listening after response...");
         setTimeout(() => {
+          recognitionActive = false;
           triggerCommandListening();
         }, 500);
       } else {
+        // Normal mode: restart wake word
         restartWakeWord();
       }
     };
@@ -753,7 +785,17 @@ function useFallbackVoice(text, langPrefix) {
   utterance.onend = () => {
     isSpeaking = false;
     setAuraState('idle');
-    restartWakeWord();
+
+    if (continuousListeningMode) {
+      // ✅ In continuous mode, restart listening after speaking
+      console.log("🔄 Continuous mode: restarting listening after response...");
+      setTimeout(() => {
+        recognitionActive = false;
+        triggerCommandListening();
+      }, 500);
+    } else {
+      restartWakeWord();
+    }
   };
   
   window.speechSynthesis.speak(utterance);
@@ -815,7 +857,7 @@ async function sendToAI(text) {
     updateBubble("Error");
     setAuraState('idle');
     isProcessing = false;
-    restartWakeWord();
+    restartAfterCommand();
   }
 }
 
@@ -826,10 +868,10 @@ auraRobot.addEventListener('click', () => {
     wakeRecognition && wakeRecognition.stop();
   } catch(e) {}
 
-  conversationMode = true;
+  continuousListeningMode = true;  // ✅ Enable continuous mode on tap
   triggerCommandListening();
 });
 
 // Initial state
 setAuraState('idle');
-console.log("✅ AURA Voice Agent initialized");
+console.log("✅ AURA Voice Agent initialized with Siri-like continuous listening mode");
