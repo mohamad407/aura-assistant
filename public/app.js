@@ -268,7 +268,7 @@ if (
 
   console.log("❌ No local command matched, sending to AI");
   return false; // Not handled locally, send to AI
-}
+
 if (lower.startsWith("call ")) {
 
     const person = lower.replace("call ", "").trim();
@@ -282,6 +282,7 @@ if (lower.startsWith("call ")) {
 
     return true;
 }
+ }
 
 // ==========================================
 // 🎙️ WAKE WORD ENGINE — "Aura" trigger (IMPROVED)
