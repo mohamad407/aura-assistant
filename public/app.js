@@ -502,7 +502,7 @@ commandRecognition.onresult = (event) => {
 // } catch(e) {
   //  console.error("Failed to start command listening:", e.message);
   }
-}//
+
 
 function restartWakeWord() {
   console.log("🔄 Restarting wake word listening...");
