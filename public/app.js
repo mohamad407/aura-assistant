@@ -90,19 +90,15 @@ const APP_URLS = {
 // ==========================================
 // 🎵 PLAY SONG — COMPLETE FIXED CODE
 // ==========================================
-// ==========================================
-// 🎵 FIXED: handlePlaySongEnhanced - WITH DIAGNOSTICS
-// ==========================================
-// Replace your handlePlaySongEnhanced function with this
 
 async function handlePlaySongEnhanced(transcript) {
   console.log("🎵 handlePlaySongEnhanced called with:", transcript);
   
   const lower = transcript.toLowerCase();
-  let platform = 'spotify';
+  let platform = 'spotify';  // Default platform
   let songQuery = '';
 
-  // Detect platform
+  // ✅ STEP 1: Detect platform (on spotify, on youtube, etc.)
   if (lower.includes(' on jiosaavn') || lower.includes(' in jiosaavn')) {
     platform = 'jiosaavn';
   } else if (lower.includes(' on gaana') || lower.includes(' in gaana')) {
@@ -115,12 +111,12 @@ async function handlePlaySongEnhanced(transcript) {
     platform = 'youtube';
   }
 
-  // Extract song name
+  // ✅ STEP 2: Extract song name - FIXED REGEX
   songQuery = lower
-    .replace(/^play\s+/i, '')
-    .replace(/\s+(on|in)\s+/gi, ' ')
-    .replace(/\s+song\s*$/i, '')
-    .replace(/spotify|youtube|gaana|jiosaavn|youtube music/gi, '')
+    .replace(/^play\s+/i, '')              // Remove "play" from start
+    .replace(/\s+(on|in)\s+/gi, ' ')       // Remove "on/in" (all occurrences)
+    .replace(/\s+song\s*$/i, '')           // Remove "song" from end
+    .replace(/spotify|youtube|gaana|jiosaavn|youtube music/gi, '') // Remove platform names
     .trim();
 
   console.log("📝 Extracted song query:", songQuery);
@@ -128,7 +124,7 @@ async function handlePlaySongEnhanced(transcript) {
 
   if (!songQuery || songQuery.length < 2) {
     const msg = "Please tell me what song you want to play! 🎵";
-    console.log("❌ Song query too short");
+    console.log("❌ Song query too short or empty");
     addMessageToUI('assistant', msg);
     speakResponse(msg);
     return true;
@@ -139,19 +135,12 @@ async function handlePlaySongEnhanced(transcript) {
     console.log("🎵 Playing on Spotify...");
     
     try {
-      // Build Spotify URL FIRST (don't wait for API)
-      const spotifySearchUrl = `https://open.spotify.com/search/${encodeURIComponent(songQuery)}`;
-      console.log("📱 Spotify URL built:", spotifySearchUrl);
-      
-      // Try to get token and search
+      // Get token from backend
       console.log("🔑 Fetching Spotify token...");
-      const tokenResponse = await fetch('http://localhost:3000/api/spotify/token', {
-        timeout: 5000 // 5 second timeout
-      });
+      const tokenResponse = await fetch('http://localhost:3000/api/spotify/token');
       
       if (!tokenResponse.ok) {
-        console.warn("⚠️ Token fetch failed, using fallback");
-        throw new Error("Token unavailable");
+        throw new Error(`Token error: ${tokenResponse.status}`);
       }
       
       const { accessToken } = await tokenResponse.json();
@@ -168,80 +157,64 @@ async function handlePlaySongEnhanced(transcript) {
       
       const searchData = await searchResponse.json();
       
-      if (searchData.tracks && searchData.tracks.items && searchData.tracks.items.length > 0) {
-        const track = searchData.tracks.items[0];
-        const trackName = track.name;
-        const artistName = track.artists[0].name;
-        
-        console.log(`✅ Found song: "${trackName}" by ${artistName}`);
-        
-        // Respond to user
-        const msg = `🎵 Now playing "${trackName}" by ${artistName} on Spotify!`;
+      if (!searchData.tracks || !searchData.tracks.items || searchData.tracks.items.length === 0) {
+        console.log("❌ Song not found on Spotify");
+        const msg = `Sorry, I couldn't find "${songQuery}" on Spotify`;
         addMessageToUI('assistant', msg);
         speakResponse(msg);
-      } else {
-        console.log("⚠️ Song not found in Spotify search");
-        const msg = `🎵 Opening Spotify to search for "${songQuery}"`;
-        addMessageToUI('assistant', msg);
-        speakResponse(msg);
+        return true;
       }
       
-      // ✅ OPEN SPOTIFY - Don't wait, open immediately
+      const track = searchData.tracks.items[0];
+      const trackName = track.name;
+      const artistName = track.artists[0].name;
+      
+      console.log(`✅ Found song: "${trackName}" by ${artistName}`);
+      
+      // Tell user and open Spotify
+      const msg = `🎵 Now playing "${trackName}" by ${artistName} on Spotify!`;
+      addMessageToUI('assistant', msg);
+      speakResponse(msg);
+      
+      // ✅ OPEN SPOTIFY WITH CORRECT SONG QUERY
       setTimeout(() => {
+        const spotifySearchUrl = `https://open.spotify.com/search/${encodeURIComponent(songQuery)}`;
         console.log("📱 Opening Spotify URL:", spotifySearchUrl);
         
-        // Try multiple methods to open Spotify
         try {
-          // Method 1: window.open()
           const newWindow = window.open(spotifySearchUrl, '_blank');
-          
-          if (newWindow) {
-            console.log("✅ Spotify opened via window.open()");
-          } else {
-            // Method 2: If popup blocked, try direct href
-            console.warn("⚠️ window.open() failed, trying alternative");
+          if (!newWindow) {
+            console.warn("Popup blocked, trying alternative");
             window.location.href = spotifySearchUrl;
-            console.log("✅ Spotify opened via window.location");
           }
         } catch (e) {
-          console.error("❌ Error opening Spotify:", e.message);
-          // Method 3: Final fallback
+          console.error("Error opening Spotify:", e);
           window.location.href = spotifySearchUrl;
         }
-      }, 800); // Shorter delay
+      }, 1500);
       
       return true;
       
     } catch (error) {
       console.error("❌ Error:", error.message);
       
-      // FALLBACK: Always open Spotify with song query
+      // Fallback: Open search anyway with the song query
       const spotifySearchUrl = `https://open.spotify.com/search/${encodeURIComponent(songQuery)}`;
-      console.log("🔄 Using fallback - opening Spotify:", spotifySearchUrl);
+      console.log("🔄 Fallback: Opening Spotify search with:", songQuery);
       
       const msg = `🎵 Opening Spotify for "${songQuery}"`;
       addMessageToUI('assistant', msg);
       speakResponse(msg);
       
-      // Open immediately
       setTimeout(() => {
-        try {
-          const newWindow = window.open(spotifySearchUrl, '_blank');
-          if (!newWindow) {
-            console.log("Popup blocked, using location.href");
-            window.location.href = spotifySearchUrl;
-          }
-        } catch (e) {
-          console.error("Error:", e);
-          window.location.href = spotifySearchUrl;
-        }
-      }, 500); // Even shorter delay
+        window.open(spotifySearchUrl, '_blank');
+      }, 1200);
       
       return true;
     }
   }
   
-  // OTHER PLATFORMS
+  // ✅ OTHER PLATFORMS (YouTube, Gaana, JioSaavn, etc.)
   let url = '';
   let platformName = '';
 
@@ -265,46 +238,15 @@ async function handlePlaySongEnhanced(transcript) {
   
   setTimeout(() => {
     console.log("📱 Opening:", url);
-    try {
-      const newWindow = window.open(url, '_blank');
-      if (!newWindow) {
-        window.location.href = url;
-      }
-    } catch (e) {
+    const newWindow = window.open(url, '_blank');
+    if (!newWindow) {
       window.location.href = url;
     }
-  }, 800);
+  }, 1200);
   
   return true;
 }
 
-// ==========================================
-// 🧪 DEBUG HELPER - Copy & Paste in Console
-// ==========================================
-
-/*
-// To test in browser console (F12):
-
-// Test 1: Check if Spotify URL encodes correctly
-const songName = "ennodu nee irundhaal";
-const url = `https://open.spotify.com/search/${encodeURIComponent(songName)}`;
-console.log("URL:", url);
-window.open(url, '_blank');
-
-// Test 2: Check if song extraction works
-const transcript = "play ennodu nee irundhaal song on spotify";
-const lower = transcript.toLowerCase();
-const songQuery = lower
-  .replace(/^play\s+/i, '')
-  .replace(/\s+(on|in)\s+/gi, ' ')
-  .replace(/\s+song\s*$/i, '')
-  .replace(/spotify|youtube|gaana|jiosaavn|youtube music/gi, '')
-  .trim();
-console.log("Extracted:", songQuery);
-
-// Test 3: Check if Spotify can be opened
-window.open("https://open.spotify.com/search/levitating", '_blank');
-*/
 // ==========================================
 // 📱 OPEN APP — Smart detection
 // ==========================================
