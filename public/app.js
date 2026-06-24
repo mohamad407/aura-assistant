@@ -1,3 +1,9 @@
+// ==========================================
+// 🎙️ AURA VOICE ASSISTANT - COMPLETE CODE
+// ==========================================
+// Siri-like continuous listening + Spotify integration
+// Updated: June 2026
+
 // DOM Elements
 const auraRobot = document.getElementById('auraRobot');
 const speechBubble = document.getElementById('speechBubble');
@@ -19,7 +25,7 @@ let wakeWordActive = false;
 let wakeRecognition = null;
 let commandRecognition = null;
 let wakeWordRetryCount = 0;
-let continuousListeningMode = false;  // ✅ NEW: Continuous mode flag
+let continuousListeningMode = false;
 let recognitionActive = false;
 
 // ==========================================
@@ -82,18 +88,18 @@ const APP_URLS = {
 };
 
 // ==========================================
-// 🎵 PLAY SONG — Smart detection (IMPROVED)
+// 🎵 PLAY SONG — COMPLETE FIXED CODE
 // ==========================================
-function handlePlaySong(transcript) {
-  const lower = transcript.toLowerCase();
 
-  let platform = 'youtube'; // default
+async function handlePlaySongEnhanced(transcript) {
+  console.log("🎵 handlePlaySongEnhanced called with:", transcript);
+  
+  const lower = transcript.toLowerCase();
+  let platform = 'spotify';  // Default platform
   let songQuery = '';
 
-  // Detect platform override
-  if (lower.includes(' on spotify') || lower.includes(' in spotify') || lower.includes('spotify')) {
-    platform = 'spotify';
-  } else if (lower.includes(' on jiosaavn') || lower.includes(' in jiosaavn')) {
+  // ✅ STEP 1: Detect platform (on spotify, on youtube, etc.)
+  if (lower.includes(' on jiosaavn') || lower.includes(' in jiosaavn')) {
     platform = 'jiosaavn';
   } else if (lower.includes(' on gaana') || lower.includes(' in gaana')) {
     platform = 'gaana';
@@ -101,33 +107,118 @@ function handlePlaySong(transcript) {
     platform = 'youtube_music';
   } else if (lower.includes('youtube music')) {
     platform = 'youtube_music';
+  } else if (lower.includes('youtube')) {
+    platform = 'youtube';
   }
 
-  // Extract song name — strip trigger words
-  let cleaned = lower
-    .replace(/play\s+/i, '')
-    .replace(/\s+on\s+(spotify|youtube|jiosaavn|gaana|youtube music)/i, '')
-    .replace(/\s+in\s+(spotify|youtube|jiosaavn|gaana|youtube music)/i, '')
-    .replace(/\s+(on|in)\s+/i, ' ')
-    .replace(/\s+song\s*/i, ' ')
+  // ✅ STEP 2: Extract song name - FIXED REGEX
+  songQuery = lower
+    .replace(/^play\s+/i, '')              // Remove "play" from start
+    .replace(/\s+(on|in)\s+/gi, ' ')       // Remove "on/in" (all occurrences)
+    .replace(/\s+song\s*$/i, '')           // Remove "song" from end
+    .replace(/spotify|youtube|gaana|jiosaavn|youtube music/gi, '') // Remove platform names
     .trim();
 
-  songQuery = cleaned;
+  console.log("📝 Extracted song query:", songQuery);
+  console.log("📱 Platform detected:", platform);
 
   if (!songQuery || songQuery.length < 2) {
     const msg = "Please tell me what song you want to play! 🎵";
+    console.log("❌ Song query too short or empty");
     addMessageToUI('assistant', msg);
     speakResponse(msg);
     return true;
   }
 
+  // ✅ SPOTIFY FLOW
+  if (platform === 'spotify') {
+    console.log("🎵 Playing on Spotify...");
+    
+    try {
+      // Get token from backend
+      console.log("🔑 Fetching Spotify token...");
+      const tokenResponse = await fetch('http://localhost:3000/api/spotify/token');
+      
+      if (!tokenResponse.ok) {
+        throw new Error(`Token error: ${tokenResponse.status}`);
+      }
+      
+      const { accessToken } = await tokenResponse.json();
+      console.log("✅ Token received");
+      
+      // Search Spotify
+      console.log(`🔍 Searching Spotify for: "${songQuery}"`);
+      const searchResponse = await fetch(
+        `https://api.spotify.com/v1/search?q=${encodeURIComponent(songQuery)}&type=track&limit=1`,
+        {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        }
+      );
+      
+      const searchData = await searchResponse.json();
+      
+      if (!searchData.tracks || !searchData.tracks.items || searchData.tracks.items.length === 0) {
+        console.log("❌ Song not found on Spotify");
+        const msg = `Sorry, I couldn't find "${songQuery}" on Spotify`;
+        addMessageToUI('assistant', msg);
+        speakResponse(msg);
+        return true;
+      }
+      
+      const track = searchData.tracks.items[0];
+      const trackName = track.name;
+      const artistName = track.artists[0].name;
+      
+      console.log(`✅ Found song: "${trackName}" by ${artistName}`);
+      
+      // Tell user and open Spotify
+      const msg = `🎵 Now playing "${trackName}" by ${artistName} on Spotify!`;
+      addMessageToUI('assistant', msg);
+      speakResponse(msg);
+      
+      // ✅ OPEN SPOTIFY WITH CORRECT SONG QUERY
+      setTimeout(() => {
+        const spotifySearchUrl = `https://open.spotify.com/search/${encodeURIComponent(songQuery)}`;
+        console.log("📱 Opening Spotify URL:", spotifySearchUrl);
+        
+        try {
+          const newWindow = window.open(spotifySearchUrl, '_blank');
+          if (!newWindow) {
+            console.warn("Popup blocked, trying alternative");
+            window.location.href = spotifySearchUrl;
+          }
+        } catch (e) {
+          console.error("Error opening Spotify:", e);
+          window.location.href = spotifySearchUrl;
+        }
+      }, 1500);
+      
+      return true;
+      
+    } catch (error) {
+      console.error("❌ Error:", error.message);
+      
+      // Fallback: Open search anyway with the song query
+      const spotifySearchUrl = `https://open.spotify.com/search/${encodeURIComponent(songQuery)}`;
+      console.log("🔄 Fallback: Opening Spotify search with:", songQuery);
+      
+      const msg = `🎵 Opening Spotify for "${songQuery}"`;
+      addMessageToUI('assistant', msg);
+      speakResponse(msg);
+      
+      setTimeout(() => {
+        window.open(spotifySearchUrl, '_blank');
+      }, 1200);
+      
+      return true;
+    }
+  }
+  
+  // ✅ OTHER PLATFORMS (YouTube, Gaana, JioSaavn, etc.)
   let url = '';
   let platformName = '';
 
-  if (platform === 'spotify') {
-    url = `https://open.spotify.com/search/${encodeURIComponent(songQuery)}`;
-    platformName = 'Spotify';
-  } else if (platform === 'jiosaavn') {
+  if (platform === 'jiosaavn') {
     url = `https://www.jiosaavn.com/search/${encodeURIComponent(songQuery)}`;
     platformName = 'JioSaavn';
   } else if (platform === 'gaana') {
@@ -136,27 +227,28 @@ function handlePlaySong(transcript) {
   } else if (platform === 'youtube_music') {
     url = `https://music.youtube.com/search?q=${encodeURIComponent(songQuery)}`;
     platformName = 'YouTube Music';
-  } else {
-    // Default: YouTube
+  } else if (platform === 'youtube') {
     url = `https://www.youtube.com/results?search_query=${encodeURIComponent(songQuery)}`;
     platformName = 'YouTube';
   }
 
-  const msg = `🎵 Playing "${songQuery}" on ${platformName}!`;
+  const msg = `🎵 Opening "${songQuery}" on ${platformName}!`;
   addMessageToUI('assistant', msg);
   speakResponse(msg);
+  
   setTimeout(() => {
+    console.log("📱 Opening:", url);
     const newWindow = window.open(url, '_blank');
     if (!newWindow) {
-      console.warn("Popup blocked, trying alternate method");
       window.location.href = url;
     }
   }, 1200);
+  
   return true;
 }
 
 // ==========================================
-// 📱 OPEN APP — Smart detection (IMPROVED)
+// 📱 OPEN APP — Smart detection
 // ==========================================
 function handleOpenApp(transcript) {
   const lower = transcript.toLowerCase().trim();
@@ -198,16 +290,18 @@ function handleOpenApp(transcript) {
 }
 
 // ==========================================
-// 🔍 LOCAL COMMAND HANDLER — runs before sending to AI
+// 🔍 LOCAL COMMAND HANDLER
 // ==========================================
 function handleLocalCommands(transcript) {
   if (!transcript || transcript.trim().length === 0) return false;
 
   const lower = transcript.toLowerCase().trim();
 
-  // ✅ NEW: Stop command to exit continuous mode
+  console.log(`📝 Processing command: "${lower}"`);
+
+  // ✅ STOP COMMAND
   if (lower === "stop" || lower === "stop listening" || lower === "quit") {
-    console.log("🛑 Stop command detected - exiting continuous listening mode");
+    console.log("🛑 Stop command detected");
     continuousListeningMode = false;
     const msg = "Okay, stopping. Say Aura to wake me again!";
     addMessageToUI('assistant', msg);
@@ -216,11 +310,7 @@ function handleLocalCommands(transcript) {
   }
 
   // Greetings
-  if (
-    lower === "hi" ||
-    lower === "hello" ||
-    lower === "hey"
-  ) {
+  if (lower === "hi" || lower === "hello" || lower === "hey") {
     const msg = "Hello! How are you today?";
     addMessageToUI('assistant', msg);
     speakResponse(msg);
@@ -258,9 +348,7 @@ function handleLocalCommands(transcript) {
     return true;
   }
 
-  console.log(`📝 Processing command: "${lower}"`);
-
-  // Play song command
+  // ✅ PLAY SONG COMMAND - USES FIXED FUNCTION
   const playPatterns = [
     /^play\s+.+/i,
     /^play\s+.+\s+song/i,
@@ -269,7 +357,7 @@ function handleLocalCommands(transcript) {
 
   if (playPatterns.some(p => p.test(lower))) {
     console.log("✅ Matched PLAY pattern");
-    return handlePlaySong(transcript);
+    return handlePlaySongEnhanced(transcript);  // ✅ USE FIXED FUNCTION
   }
 
   // Open app command
@@ -303,13 +391,13 @@ function handleLocalCommands(transcript) {
 }
 
 // ==========================================
-// 🎙️ WAKE WORD ENGINE — "Aura" trigger (IMPROVED)
+// 🎙️ WAKE WORD ENGINE
 // ==========================================
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
 function setupWakeWordListener() {
   if (!SpeechRecognition) {
-    console.error("❌ Speech Recognition API not supported in this browser");
+    console.error("❌ Speech Recognition API not supported");
     return;
   }
 
@@ -342,7 +430,7 @@ function setupWakeWordListener() {
     const allText = (finalTranscript + interimTranscript).toLowerCase();
     console.log(`🎙️ Wake word interim: "${allText}"`);
 
-    // Check for wake word "aura" with flexible matching
+    // Check for wake word "aura"
     const wakeWordPatterns = [
       /\baura\b/i,
       /\bawra\b/i,
@@ -355,12 +443,11 @@ function setupWakeWordListener() {
 
     if (wakeWordDetected) {
       if (!isListening && !isProcessing && !isSpeaking && CURRENT_USER_ID) {
-        console.log('✅ Wake word "AURA" DETECTED! Starting continuous listening...');
+        console.log('✅ Wake word "AURA" DETECTED!');
         try {
           wakeRecognition.stop();
         } catch(e) {}
         
-        // ✅ Respond "Yes" and enter continuous listening mode
         speakResponse("Yes");
         
         setTimeout(() => {
@@ -373,7 +460,6 @@ function setupWakeWordListener() {
 
   wakeRecognition.onend = () => {
     console.log("🔴 Wake word listener ended");
-    // Restart wake word listener unless we're in command session
     if (!isListening && !isProcessing && !isSpeaking && CURRENT_USER_ID && wakeWordActive && !continuousListeningMode) {
       console.log("🔄 Restarting wake word listener...");
       setTimeout(() => {
@@ -463,7 +549,6 @@ function triggerCommandListening() {
     recognitionActive = false;
     isListening = false;
 
-    // Ignore Chrome abort errors
     if (e.error === "aborted") {
       return;
     }
@@ -478,7 +563,6 @@ function triggerCommandListening() {
   }
 }
 
-// ✅ NEW: Handle restart based on mode
 function restartAfterCommand() {
   if (continuousListeningMode) {
     console.log("🔄 Continuous mode: restarting listening...");
@@ -495,14 +579,13 @@ function restartAfterCommand() {
 function restartWakeWord() {
   console.log("🔄 Restarting wake word listening...");
   showWakeWordIndicator(false);
-  continuousListeningMode = false;  // ✅ Reset mode
+  continuousListeningMode = false;
   if (CURRENT_USER_ID && wakeWordActive) {
     setTimeout(() => {
       try { 
         if (wakeRecognition) wakeRecognition.start();
       } catch(e) {
         console.error("Error restarting wake word:", e.message);
-        // Fallback: recreate the listener
         setTimeout(setupWakeWordListener, 1000);
       }
     }, 800);
@@ -575,7 +658,7 @@ document.getElementById('google-btn').addEventListener('click', () => {
 
 document.getElementById('logout-btn').addEventListener('click', () => {
   wakeWordActive = false;
-  continuousListeningMode = false;  // ✅ Reset on logout
+  continuousListeningMode = false;
   try { wakeRecognition && wakeRecognition.stop(); } catch(e) {}
   window.firebaseAuth.signOut(window.firebaseAuth.auth);
 });
@@ -586,7 +669,6 @@ window.firebaseAuth.onAuthStateChanged(window.firebaseAuth.auth, (user) => {
     authScreen.style.display = 'none';
     appContainer.style.display = 'flex';
     console.log(`✅ User logged in: ${user.email}`);
-    // Start wake word listener after login
     setTimeout(() => {
       console.log("Starting wake word listener after login...");
       setupWakeWordListener();
@@ -594,7 +676,7 @@ window.firebaseAuth.onAuthStateChanged(window.firebaseAuth.auth, (user) => {
   } else {
     CURRENT_USER_ID = null;
     wakeWordActive = false;
-    continuousListeningMode = false;  // ✅ Reset on logout
+    continuousListeningMode = false;
     try { wakeRecognition && wakeRecognition.stop(); } catch(e) {}
     authScreen.style.display = 'flex';
     appContainer.style.display = 'none';
@@ -737,27 +819,24 @@ async function speakResponse(text) {
       updateBubble("Speaking..."); 
     };
     
-    // ✅ Unified onended handler
     audioPlayer.onended = () => {
       isSpeaking = false;
       setAuraState('idle');
 
       if (continuousListeningMode) {
-        // ✅ In continuous mode, restart listening immediately after speaking
-        console.log("🔄 Continuous mode: restarting listening after response...");
+        console.log("🔄 Continuous mode: restarting listening...");
         setTimeout(() => {
           recognitionActive = false;
           triggerCommandListening();
         }, 500);
       } else {
-        // Normal mode: restart wake word
         restartWakeWord();
       }
     };
     
     await audioPlayer.play().catch(e => useFallbackVoice(text, langPrefix));
   } catch (error) {
-    console.error("Cloud Voice Error. Falling back:", error.message);
+    console.error("Cloud Voice Error:", error.message);
     useFallbackVoice(text, langPrefix);
   }
 }
@@ -787,8 +866,7 @@ function useFallbackVoice(text, langPrefix) {
     setAuraState('idle');
 
     if (continuousListeningMode) {
-      // ✅ In continuous mode, restart listening after speaking
-      console.log("🔄 Continuous mode: restarting listening after response...");
+      console.log("🔄 Continuous mode: restarting listening...");
       setTimeout(() => {
         recognitionActive = false;
         triggerCommandListening();
@@ -821,7 +899,7 @@ async function sendToAI(text) {
     
     console.log(`📤 AI Reply received (${aiReply.length} chars)`);
     
-    // ACTION PARSER (Open Apps / Call)
+    // ACTION PARSER
     if (aiReply.includes("ACTION: URL:")) {
       const urlMatch = aiReply.match(/ACTION:\s*URL:\s*([^\s\n]+)/i);
       if (urlMatch && urlMatch[1]) {
@@ -861,17 +939,17 @@ async function sendToAI(text) {
   }
 }
 
-// --- MANUAL ORB CLICK (fallback for tap-to-talk) ---
+// --- MANUAL ORB CLICK ---
 auraRobot.addEventListener('click', () => {
   console.log("📱 Tap detected - starting command listening...");
   try {
     wakeRecognition && wakeRecognition.stop();
   } catch(e) {}
 
-  continuousListeningMode = true;  // ✅ Enable continuous mode on tap
+  continuousListeningMode = true;
   triggerCommandListening();
 });
 
 // Initial state
 setAuraState('idle');
-console.log("✅ AURA Voice Agent initialized with Siri-like continuous listening mode");
+console.log("✅ AURA Voice Agent initialized with Spotify integration");
