@@ -150,6 +150,165 @@ app.post('/tts', async (req, res) => {
 });
 
 // ==========================================
+// 🎵 SPOTIFY INTEGRATION (NEW)
+// ==========================================
+// Cache token to avoid multiple requests
+
+let spotifyTokenCache = null;
+let spotifyTokenExpireTime = 0;
+
+const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
+const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
+
+// Endpoint 1: Get Spotify Access Token
+app.get('/api/spotify/token', async (req, res) => {
+  try {
+    // Check if we have a cached token that's still valid
+    if (spotifyTokenCache && Date.now() < spotifyTokenExpireTime) {
+      console.log('✅ Using cached Spotify token');
+      return res.json({ 
+        accessToken: spotifyTokenCache,
+        source: 'cache',
+        expiresIn: Math.floor((spotifyTokenExpireTime - Date.now()) / 1000)
+      });
+    }
+
+    console.log('🔑 Requesting new Spotify access token...');
+
+    // Request new token from Spotify
+    const response = await axios.post(
+      'https://accounts.spotify.com/api/token',
+      null,
+      {
+        params: {
+          grant_type: 'client_credentials'
+        },
+        auth: {
+          username: SPOTIFY_CLIENT_ID,
+          password: SPOTIFY_CLIENT_SECRET
+        }
+      }
+    );
+
+    // Cache the token
+    spotifyTokenCache = response.data.access_token;
+    // Token valid for 3600 seconds, cache for 3500 to be safe
+    spotifyTokenExpireTime = Date.now() + (response.data.expires_in - 100) * 1000;
+
+    console.log('✅ New Spotify token received, expires in ' + response.data.expires_in + ' seconds');
+
+    res.json({ 
+      accessToken: response.data.access_token,
+      expiresIn: response.data.expires_in,
+      source: 'fresh'
+    });
+
+  } catch (error) {
+    console.error('❌ Spotify token error:', error.message);
+    
+    res.status(500).json({ 
+      error: 'Failed to get Spotify access token',
+      details: error.message,
+      hint: 'Check SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET in .env'
+    });
+  }
+});
+
+// Endpoint 2: Search Songs on Spotify
+app.get('/api/spotify/search', async (req, res) => {
+  try {
+    const { q, limit = 5 } = req.query;
+
+    if (!q) {
+      return res.status(400).json({ error: 'Query parameter required' });
+    }
+
+    // Get cached or fresh token
+    let token = spotifyTokenCache;
+    
+    if (!token || Date.now() >= spotifyTokenExpireTime) {
+      console.log('🔑 Token expired, requesting new one...');
+      const tokenRes = await axios.post(
+        'https://accounts.spotify.com/api/token',
+        null,
+        {
+          params: { grant_type: 'client_credentials' },
+          auth: {
+            username: SPOTIFY_CLIENT_ID,
+            password: SPOTIFY_CLIENT_SECRET
+          }
+        }
+      );
+      token = tokenRes.data.access_token;
+      spotifyTokenCache = token;
+      spotifyTokenExpireTime = Date.now() + (tokenRes.data.expires_in - 100) * 1000;
+    }
+
+    // Search Spotify
+    console.log(`🔍 Searching Spotify for: "${q}"`);
+    const searchRes = await axios.get(
+      'https://api.spotify.com/v1/search',
+      {
+        params: {
+          q: q,
+          type: 'track',
+          limit: limit
+        },
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      }
+    );
+
+    const tracks = searchRes.data.tracks.items.map(track => ({
+      id: track.id,
+      name: track.name,
+      artist: track.artists[0].name,
+      album: track.album.name,
+      uri: track.uri,
+      image: track.album.images[0]?.url,
+      previewUrl: track.preview_url,
+      duration: track.duration_ms,
+      url: track.external_urls.spotify
+    }));
+
+    console.log(`✅ Found ${tracks.length} tracks`);
+    res.json({ 
+      query: q,
+      results: tracks,
+      total: searchRes.data.tracks.total
+    });
+
+  } catch (error) {
+    console.error('❌ Spotify search error:', error.message);
+    res.status(500).json({ 
+      error: 'Search failed',
+      details: error.message
+    });
+  }
+});
+
+// Endpoint 3: Health Check
+app.get('/api/spotify/health', (req, res) => {
+  const isConfigured = 
+    SPOTIFY_CLIENT_ID && 
+    SPOTIFY_CLIENT_ID !== 'YOUR_CLIENT_ID_HERE' &&
+    SPOTIFY_CLIENT_SECRET && 
+    SPOTIFY_CLIENT_SECRET !== 'YOUR_CLIENT_SECRET_HERE';
+
+  res.json({
+    status: isConfigured ? 'configured' : 'not-configured',
+    message: isConfigured 
+      ? 'Spotify integration ready' 
+      : 'Configure SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET in .env',
+    cached_token: spotifyTokenCache ? 'yes' : 'no',
+    token_expires_in: spotifyTokenCache 
+      ? Math.floor((spotifyTokenExpireTime - Date.now()) / 1000) 
+      : 'N/A'
+  });
+});
+
+// ==========================================
 // 🛣️ API ENDPOINTS
 // ==========================================
 
@@ -177,4 +336,13 @@ app.post('/chat', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => console.log(`🚀 AURA Multi-AI Backend running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`🚀 AURA Multi-AI Backend running on port ${PORT}`);
+  console.log(`📊 Endpoints available:`);
+  console.log(`   POST /chat - AI chat endpoint`);
+  console.log(`   GET /history/:userId - Chat history`);
+  console.log(`   POST /tts - Text-to-speech`);
+  console.log(`   GET /api/spotify/token - Get Spotify token`);
+  console.log(`   GET /api/spotify/search - Search songs`);
+  console.log(`   GET /api/spotify/health - Spotify health check`);
+});
