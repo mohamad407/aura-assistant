@@ -368,7 +368,7 @@ if (
   lower.includes("15 models") ||
   lower.includes("which models power you")
 ) {
-  const msg = `I can work with multiple open and freely available AI models. Some of the models I support include:
+  const msg = `I can work with multiple and 15+ open and freely available AI models. Some of the models I support include:
 
 1. Llama 3.3
 2. Llama 3.1
