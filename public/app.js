@@ -343,7 +343,7 @@ if (
   lower.includes("who invented you") ||
   lower.includes("who designed you") ||
  lower.includes(about your creator) ||
-  lower.includes("created you")  
+ 
  ) {
   const msg = `I was created by Mohammed Asif on June 22, 2026.
 
