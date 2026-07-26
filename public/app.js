@@ -325,19 +325,73 @@ function handleLocalCommands(transcript) {
     return true;
   }
 
-  // Creator information
-  if (
-    lower.includes("who discovered you") ||
-    lower.includes("who created you") ||
-    lower.includes("who made you")
-  ) {
-    const msg =
-      "I was created by Mohammed Asif on June 22, 2026. I am Aura, powered by more than 15 AI models working together.";
-    addMessageToUI('assistant', msg);
-    speakResponse(msg);
-    return true;
-  }
+ // ==========================
+// ABOUT CREATOR / OWNER
+// ==========================
+if (
+  lower.includes("who discovered you") ||
+  lower.includes("who created you") ||
+  lower.includes("who made you") ||
+  lower.includes("who is your owner") ||
+  lower.includes("who owns you") ||
+  lower.includes("tell me about your owner") ||
+  lower.includes("tell me about your creator") ||
+  lower.includes("describe your creator") ||
+  lower.includes("who developed you") ||
+  lower.includes("who built you") ||
+  lower.includes("who is behind you") ||
+  lower.includes("who invented you") ||
+  lower.includes("who designed you")
+) {
+  const msg = `I was created by Mohammed Asif on June 22, 2026.
 
+Mohammed Asif is a Software Engineering student and an AI developer from VIT. He is passionate about Artificial Intelligence, Full Stack Development, and building real-world products that solve practical problems.
+
+He created me, Aura, to be an intelligent personal AI assistant capable of natural conversations, helping users with coding, learning, productivity, automation, and everyday tasks.
+
+His vision is to continuously improve me with advanced AI technologies, multilingual support, voice interaction, and smart automation to make AI more useful for everyone.`;
+
+  addMessageToUI("assistant", msg);
+  speakResponse(msg);
+  return true;
+}
+  // ==========================
+// AI MODELS
+// ==========================
+if (
+  lower.includes("what models do you use") ||
+  lower.includes("which ai models do you have") ||
+  lower.includes("tell your models") ||
+  lower.includes("tell me your models") ||
+  lower.includes("list your ai models") ||
+  lower.includes("how many ai models") ||
+  lower.includes("15 models") ||
+  lower.includes("which models power you")
+) {
+  const msg = `I can work with multiple open and freely available AI models. Some of the models I support include:
+
+1. Llama 3.3
+2. Llama 3.1
+3. DeepSeek V3
+4. DeepSeek R1
+5. Qwen 2.5
+6. Qwen Coder
+7. Gemma 3
+8. Gemma 2
+9. Mistral 7B
+10. Mixtral 8x7B
+11. Phi-4 Mini
+12. Phi-3 Mini
+13. OpenChat
+14. TinyLlama
+15. Falcon 3
+
+These models specialize in reasoning, coding, mathematics, conversations, multilingual understanding, and general knowledge. Aura intelligently selects the most suitable model depending on the user's request.`;
+
+  addMessageToUI("assistant", msg);
+  speakResponse(msg);
+  return true;
+}
   // Call command
   if (lower.startsWith("call ")) {
     const person = lower.replace("call ", "").trim();
