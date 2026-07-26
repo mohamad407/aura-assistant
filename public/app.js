@@ -342,8 +342,9 @@ if (
   lower.includes("who is behind you") ||
   lower.includes("who invented you") ||
   lower.includes("who designed you") ||
-  lower.includes("created you")
-) {
+ lower.includes(about your creator) ||
+  lower.includes("created you")  
+ ) {
   const msg = `I was created by Mohammed Asif on June 22, 2026.
 
 Mohammed Asif is a Software Engineering student and an AI developer from VIT. He is passionate about Artificial Intelligence, Full Stack Development, and building real-world products that solve practical problems.
